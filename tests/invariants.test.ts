@@ -1,15 +1,18 @@
+import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
+import { ZERO_SCENARIO } from '../src/engine/constants';
 import { simulate } from '../src/engine/simulate';
-import { ASSET_CLASSES, type Scenario, type SeriesPoint, type SimInput } from '../src/engine/types';
-import { yearOf } from '../src/engine/time';
+import type { Scenario, SimInput } from '../src/engine/types';
 import { presetScenario, SCENARIO_PRESETS } from '../src/engine/scenarios';
+import { arbInput, arbOptions, arbPortfolio } from './arbitraries';
 import { baseInput, uniformScenario } from './fixtures';
+import { checkForwardFixedPast, checkInvariants, FIELDS, tolFor } from './invariantChecks';
 
-// DESIGN.md 11.2 불변 조건.
-// 현재: mock + 8장 5개 시나리오(결정론적 입력), 실무 모드. fast-check 무작위 입력은 M6.
+// DESIGN.md 11.2 불변 조건: mock + 8장 5개 시나리오(결정론적), fast-check 무작위 입력, 실무 모드.
 
 const TOL = 1e-6;
-const FIELDS = ['callInvest', 'callFee', 'dist', 'nav', 'cumCall', 'cumDist'] as const;
+/** 속성 테스트는 수백 회 실행하므로 기본 5초 대신 60초 (PC 부하에 따른 시간 초과 방지) */
+const PROPERTY_TIMEOUT = 60_000;
 
 const cases: [string, SimInput][] = [
   ['base', baseInput()],
@@ -31,70 +34,12 @@ function deepFreeze<T>(o: T): T {
   return o;
 }
 
-describe.each(cases)('11.2 불변 조건: %s', (_name, input) => {
-  const out = simulate(input);
-  const total = out.series.total;
-  const last = total[total.length - 1] as SeriesPoint;
+describe.each(cases)('11.2 불변 조건 (mock): %s', (_name, input) => {
+  it('공통 불변 조건', () => checkInvariants(input, simulate(input)));
 
-  it('오류 없음', () => {
-    expect(out.errors).toEqual([]);
-  });
-
-  it('누적 투자 Call 총합 = 약정 합계', () => {
-    const commitments = input.portfolio.funds.reduce((s, f) => s + f.commitment, 0);
-    expect(Math.abs(total.reduce((s, p) => s + p.callInvest, 0) - commitments)).toBeLessThan(TOL);
-  });
-
-  it('각 집행분 회수 총액 = A × M′ (실무 모드 초과 케이스는 ≥), 성과보수 = carry × (회수 총액 − A), direct는 0', () => {
-    const funds = new Map(input.portfolio.funds.map((f) => [f.id, f]));
-    const forward = input.options.sensitivityMode === 'forward';
-    for (const t of out.tranches) {
-      const f = funds.get(t.fundId);
-      if (forward) expect(t.exitGross).toBeGreaterThanOrEqual(t.amount * t.moic - TOL);
-      else expect(Math.abs(t.exitGross - t.amount * t.moic)).toBeLessThan(TOL);
-      const carry = f?.type === 'direct' ? 0 : input.portfolio.fees.carry * (t.exitGross - t.amount);
-      expect(Math.abs(t.carry - carry)).toBeLessThan(TOL);
-      expect(Math.abs(t.exitNet - (t.exitGross - t.carry))).toBeLessThan(TOL);
-    }
-  });
-
-  it('최종 연도 NAV = 0, 최종 누적 Distribution = Σ 순회수', () => {
-    expect(last.nav).toBe(0);
-    expect(Math.abs(last.cumDist - out.tranches.reduce((s, t) => s + t.exitNet, 0))).toBeLessThan(TOL);
-  });
-
-  it('연도별 집계 = 해당 연도 이벤트 합', () => {
-    for (const p of total) {
-      const ev = out.events.filter((e) => yearOf(e.time) === p.year);
-      const sum = (type: string) => ev.filter((e) => e.type === type).reduce((s, e) => s + e.amount, 0);
-      expect(Math.abs(p.callInvest - sum('call'))).toBeLessThan(TOL);
-      expect(Math.abs(p.callFee - sum('fee'))).toBeLessThan(TOL);
-      expect(Math.abs(p.dist - sum('dist'))).toBeLessThan(TOL);
-    }
-  });
-
-  it('자산군 합 = 전체 (모든 연도, 모든 필드), 펀드 합 = 전체', () => {
-    total.forEach((p, i) => {
-      for (const k of FIELDS) {
-        const byClass = ASSET_CLASSES.reduce((s, c) => s + (out.series.byClass[c][i]?.[k] ?? Number.NaN), 0);
-        const byFund = Object.values(out.series.byFund).reduce((s, fs) => s + (fs[i]?.[k] ?? Number.NaN), 0);
-        expect(Math.abs(byClass - p[k]), `${p.year} ${k} 자산군 합`).toBeLessThan(TOL);
-        expect(Math.abs(byFund - p[k]), `${p.year} ${k} 펀드 합`).toBeLessThan(TOL);
-      }
-    });
-  });
-
-  it('모든 수치 ≥ 0', () => {
-    const points = [...total, ...Object.values(out.series.byFund).flat()];
-    for (const p of points) for (const k of FIELDS) expect(p[k]).toBeGreaterThanOrEqual(0);
-    for (const e of out.events) expect(e.amount).toBeGreaterThanOrEqual(0);
-  });
-
-  it('계단형 누적선 최종값 = 연도별 최종 누적값', () => {
-    const lastStep = out.steps.total[out.steps.total.length - 1];
-    expect(Math.abs((lastStep?.cumCall ?? Number.NaN) - last.cumCall)).toBeLessThan(TOL);
-    expect(Math.abs((lastStep?.cumDist ?? Number.NaN) - last.cumDist)).toBeLessThan(TOL);
-  });
+  if (input.options.sensitivityMode === 'forward') {
+    it('실무 모드: 기준일 이전 = 기본 가정', () => checkForwardFixedPast(input, simulate(input)));
+  }
 
   it('입력을 변경하지 않음 (CLAUDE.md 원본 불변)', () => {
     const frozen = deepFreeze(structuredClone(input));
@@ -113,8 +58,51 @@ describe('KPI 기준일 정의 (9장)', () => {
   });
 });
 
-describe('11.2 무작위 입력', () => {
-  it.todo('fast-check 무작위 포트폴리오 (M6)');
+// 11.2 무작위 입력: 펀드 1~15개, 임의 약정·Vintage·집행기간·IRR·MoIC·보수율, 3.3-C 안의 조정, 임의 옵션·기준일
+describe('11.2 불변 조건 (fast-check 무작위 입력)', () => {
+  it('공통 불변 조건 — 전 구간·실무 모드', () => {
+    fc.assert(
+      fc.property(arbInput(), (input) => {
+        checkInvariants(input, simulate(input));
+      }),
+      { numRuns: 300 },
+    );
+  }, PROPERTY_TIMEOUT);
+
+  it('실무 모드: 기준일 이전 이벤트·연말 NAV·기준일 KPI = 기본 가정', () => {
+    fc.assert(
+      fc.property(arbInput(['forward']), (input) => {
+        checkForwardFixedPast(input, simulate(input));
+      }),
+      { numRuns: 300 },
+    );
+  }, PROPERTY_TIMEOUT);
+
+  it('조정 없음이면 실무 모드 = 전 구간 모드', () => {
+    fc.assert(
+      fc.property(arbPortfolio, arbOptions(['full']), (portfolio, options) => {
+        const full = simulate({ portfolio, scenario: ZERO_SCENARIO, options });
+        const fwd = simulate({ portfolio, scenario: ZERO_SCENARIO, options: { ...options, sensitivityMode: 'forward' } });
+        const tol = tolFor({ portfolio, scenario: ZERO_SCENARIO, options });
+        expect(fwd.meta.endYear).toBe(full.meta.endYear);
+        fwd.series.total.forEach((pt, i) => {
+          for (const k of FIELDS) expect(Math.abs(pt[k] - (full.series.total[i]?.[k] ?? Number.NaN))).toBeLessThanOrEqual(tol);
+        });
+      }),
+      { numRuns: 200 },
+    );
+  }, PROPERTY_TIMEOUT);
+
+  it('입력을 변경하지 않음', () => {
+    fc.assert(
+      fc.property(arbInput(), (input) => {
+        const frozen = deepFreeze(structuredClone(input));
+        simulate(frozen);
+        expect(frozen).toEqual(input);
+      }),
+      { numRuns: 50 },
+    );
+  }, PROPERTY_TIMEOUT);
 });
 
 // 11.2 실무 모드 (7.7): 기준일 이전 이벤트·연말 NAV = 기본 가정 결과
