@@ -39,13 +39,27 @@ describe('인쇄 뷰', () => {
     expect(yearLabels(pages[0]!)).toBe(18); // 2017~2033 연도 경계 + 끝
   });
 
-  it('페이지 안 6개 차트의 y축 눈금이 같음 (공통 축)', () => {
+  it('공통 y축: 첫 열만 y축 숫자·실현/추정 글자, 나머지 열은 숨김, 열 머리 하향·기본·상향 (v0.8)', () => {
     for (const p of pages) {
-      const axes = [...p.querySelectorAll('.print-cell svg')].map((svg) =>
-        [...svg.querySelectorAll('.axis-label')].map((t) => t.textContent).filter((t) => t && !/^20\d\d$/.test(t)).join(','),
-      );
-      expect(new Set(axes).size).toBe(1);
+      expect([...p.querySelectorAll('.print-colheads span')].map((s) => s.textContent)).toEqual(['', '하향', '기본', '상향']);
+      for (const row of p.querySelectorAll('.print-row')) {
+        const cells = [...row.querySelectorAll('.print-cell svg')];
+        const yLabels = (svg: Element) => [...svg.querySelectorAll('.axis-label')].map((t) => t.textContent).filter((t) => t && !/^20\d\d$/.test(t));
+        expect(yLabels(cells[0]!).length).toBeGreaterThan(0);
+        expect(yLabels(cells[1]!)).toEqual([]);
+        expect(yLabels(cells[2]!)).toEqual([]);
+        expect(cells[0]!.querySelectorAll('.asof-label').length).toBeGreaterThan(0);
+        expect(cells[2]!.querySelectorAll('.asof-label')).toHaveLength(0);
+        expect(cells[2]!.querySelector('.asof-line')).not.toBeNull();
+      }
     }
+  });
+
+  it('캡션·요약 표에 기본 대비 차이, 기본 행 강조 (v0.8)', () => {
+    const p2 = pages[1]!;
+    expect(p2.querySelector('.print-cell[data-scenario="irrUp"] figcaption')?.textContent).toContain('−0.55년');
+    expect(p2.querySelector('.print-summary tr.is-base td')?.textContent).toBe('기본');
+    expect(p2.querySelectorAll('.print-summary tbody tr')[3]?.querySelectorAll('td.delta')[1]?.textContent).toBe('−96.0');
   });
 
   it('기준일 2026-09-30 고정: 2025까지 채움, 2026부터 빗금 (모든 차트)', () => {

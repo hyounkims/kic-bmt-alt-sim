@@ -280,21 +280,26 @@ h2 { font-size: 16px; margin: 0 0 10px; font-weight: 700; letter-spacing: -0.01e
 .main-chart.compact .asof-label { font-size: 10px; }
 
 .print-page { color: #000; font-family: var(--font-kr); }
-.print-head { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 1.5px solid #000; padding-bottom: 4px; margin-bottom: 4px; }
-.print-head h1 { font-size: 15px; margin: 0 0 2px; }
-.print-head h1 span { font-weight: 400; font-size: 12px; color: #333; }
-.print-head p { margin: 0; font-size: 9px; color: #333; }
+.print-head { display: flex; justify-content: space-between; align-items: flex-start; border-top: 1px solid #000; border-bottom: 1px solid #000; padding: 4px 0 5px; margin-bottom: 4px; }
+.print-eyebrow { font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif; font-weight: 300; font-size: 13px; color: #222; }
+.print-head h1 { font-size: 17px; margin: 1px 0 3px; font-weight: 800; letter-spacing: -0.02em; }
+.print-head h1 span { font-family: var(--font-num); font-weight: 400; font-size: 13px; color: #333; margin-left: 6px; }
+.print-head p { margin: 0; font-size: 9px; line-height: 1.45; color: #333; }
 .print-page-no { font-size: 10px; color: #333; }
 .print-legend { font-size: 9px; margin: 2px 0 4px; gap: 4px 14px; }
 .print-legend .sw { width: 10px; height: 10px; }
 .ln-print-call { border-top-width: 3px; }
+.print-colheads { display: flex; gap: 4px; font-size: 10px; font-weight: 700; margin-bottom: 1px; }
+.print-colheads span { flex: 1 1 0; text-align: center; border-bottom: 1px solid #000; padding-bottom: 1px; }
+.print-colheads span:first-child { flex: 0 0 14px; border-bottom: 0; }
 .print-grid { display: flex; flex-direction: column; gap: 2px; }
 .print-row { display: flex; gap: 4px; align-items: stretch; }
 .print-row-label { writing-mode: vertical-rl; transform: rotate(180deg); font-size: 11px; font-weight: 700; text-align: center; width: 14px; border-right: 1px solid #999; }
 .print-cell { flex: 1 1 0; margin: 0; min-width: 0; border: 1px solid #ccc; padding: 2px 3px 0; }
 .print-cell.is-base { border-color: #000; border-width: 1.5px; }
 .print-cell figcaption { display: flex; justify-content: space-between; font-size: 9px; }
-.print-cell figcaption span { color: #333; font-variant-numeric: tabular-nums; }
+.print-cell figcaption span { color: #333; font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+.print-cell figcaption em { font-style: normal; font-weight: 700; color: var(--kic-navy); }
 .print-cell .line-call { stroke-width: 2.8; }
 /* 흑백에서 청록이 옅어지므로 인쇄 차트만 진한 청록 */
 .print-cell .line-dist { stroke-width: 1.4; stroke: #0b7a52; }
@@ -303,8 +308,10 @@ h2 { font-size: 16px; margin: 0 0 10px; font-weight: 700; letter-spacing: -0.01e
 .print-bottom { display: grid; grid-template-columns: 1.1fr 1fr; gap: 10px; margin-top: 5px; }
 .print-summary { font-size: 9px; }
 .print-summary th, .print-summary td { padding: 1px 6px; }
-.print-summary th { position: static; background: #eee; color: #000; box-shadow: none; }
-.print-notes { font-size: 8.5px; line-height: 1.35; }
+.print-summary th { position: static; background: #fff; color: #000; box-shadow: none; border-bottom: 1px solid #000; }
+.print-summary tr.is-base td { font-weight: 700; background: #f3f3f3; }
+.print-summary td.delta { color: var(--kic-navy); font-weight: 700; }
+.print-notes { font-size: 9px; line-height: 1.4; }
 .print-notes ul { margin: 2px 0 0; padding-left: 14px; }
 
 /* 여백은 페이지 요소 안쪽에 둔다: 인쇄 창의 여백 설정(없음 등)과 무관하게 유지 */
