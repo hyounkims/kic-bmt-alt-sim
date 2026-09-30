@@ -15,9 +15,14 @@ export interface ChartOptions {
   readonly height?: number;
   /** 기본 가정 누적선 (조정이 있을 때 회색 비교선, 10.1 v0.4) */
   readonly baseline?: readonly StepPoint[];
+  /** y축 기준 최댓값. 여러 차트의 공통 축에 사용 (10.2) */
+  readonly yMaxValue?: number;
+  /** 소형 차트: 여백·라벨 축소 (10.2 인쇄) */
+  readonly compact?: boolean;
 }
 
-const M = { top: 48, right: 112, bottom: 34, left: 60 };
+const MARGIN = { top: 48, right: 112, bottom: 34, left: 60 };
+const MARGIN_COMPACT = { top: 24, right: 84, bottom: 22, left: 44 };
 
 /** 1·2·2.5·5 × 10^k 단위의 보기 좋은 눈금 */
 export function niceTicks(max: number, target = 5): number[] {
@@ -40,7 +45,20 @@ function valueAt(steps: readonly StepPoint[], t: number, key: 'cumCall' | 'cumDi
   return v;
 }
 
+/** x 범위 [x0, x1]에서 차트가 담아야 할 최댓값 (NAV·누적 Call·Distribution, 비교선 포함) */
+export function chartMaxValue(view: ScopedView, x0: number, x1: number, baseline: readonly StepPoint[] = []): number {
+  const endYear = x1 - 1;
+  return Math.max(
+    0,
+    ...view.series.filter((p) => p.year >= x0 && p.year <= endYear).map((p) => p.nav),
+    ...[...view.steps, ...baseline].filter((p) => p.time <= x1).map((p) => Math.max(p.cumCall, p.cumDist)),
+    valueAt(view.steps, x0, 'cumCall'),
+    valueAt(view.steps, x0, 'cumDist'),
+  );
+}
+
 export function renderMainChart(view: ScopedView, meta: Meta, opts: ChartOptions): string {
+  const M = opts.compact ? MARGIN_COMPACT : MARGIN;
   const W = opts.width ?? 960;
   const H = opts.height ?? 400;
   const pw = W - M.left - M.right;
@@ -52,15 +70,7 @@ export function renderMainChart(view: ScopedView, meta: Meta, opts: ChartOptions
   const id = (s: string) => `${opts.idPrefix}-${s}`;
 
   const bars = view.series.filter((p) => p.year >= x0 && p.year <= endYear);
-  const inRange = [...view.steps, ...(opts.baseline ?? [])].filter((p) => p.time <= x1);
-  const maxVal = Math.max(
-    0,
-    ...bars.map((p) => p.nav),
-    ...inRange.map((p) => Math.max(p.cumCall, p.cumDist)),
-    valueAt(view.steps, x0, 'cumCall'),
-    valueAt(view.steps, x0, 'cumDist'),
-  );
-  const ticks = niceTicks(maxVal);
+  const ticks = niceTicks(opts.yMaxValue ?? chartMaxValue(view, x0, x1, opts.baseline));
   const yMax = ticks[ticks.length - 1] ?? 1;
 
   const x = (t: number) => M.left + ((t - x0) / (x1 - x0)) * pw;
@@ -96,7 +106,10 @@ export function renderMainChart(view: ScopedView, meta: Meta, opts: ChartOptions
   // 연도 경계(1월 1일)와 연도 라벨
   for (let yr = x0; yr <= endYear; yr++) {
     parts.push(`<line class="year-tick" x1="${f(x(yr))}" x2="${f(x(yr))}" y1="${M.top + ph}" y2="${M.top + ph + 5}"/>`);
-    parts.push(`<text class="axis-label" x="${f(x(yr + 0.5))}" y="${M.top + ph + 20}" text-anchor="middle">${yr}</text>`);
+    // 소형 차트는 격년 라벨 (겹침 방지)
+    if (!opts.compact || (yr - x0) % 2 === 0) {
+      parts.push(`<text class="axis-label" x="${f(x(yr + 0.5))}" y="${M.top + ph + (opts.compact ? 16 : 20)}" text-anchor="middle">${yr}</text>`);
+    }
   }
   parts.push(`<line class="year-tick" x1="${f(x(x1))}" x2="${f(x(x1))}" y1="${M.top + ph}" y2="${M.top + ph + 5}"/>`);
 
@@ -142,10 +155,10 @@ export function renderMainChart(view: ScopedView, meta: Meta, opts: ChartOptions
   // 기준일 선
   if (tau >= x0 && tau <= x1) {
     const tx = x(tau);
-    parts.push(`<line class="asof-line" x1="${f(tx)}" x2="${f(tx)}" y1="${M.top - 24}" y2="${M.top + ph}"/>`);
-    parts.push(`<text class="asof-label" x="${f(tx - 6)}" y="${M.top - 6}" text-anchor="end">◀ 실현</text>`);
-    parts.push(`<text class="asof-label" x="${f(tx + 6)}" y="${M.top - 6}">추정 ▶</text>`);
-    parts.push(`<text class="asof-date" x="${f(tx)}" y="${M.top - 30}" text-anchor="middle">기준일 ${escapeHtml(meta.asOf)}</text>`);
+    parts.push(`<line class="asof-line" x1="${f(tx)}" x2="${f(tx)}" y1="${opts.compact ? M.top - 18 : M.top - 24}" y2="${M.top + ph}"/>`);
+    parts.push(`<text class="asof-label" x="${f(tx - 4)}" y="${M.top - 6}" text-anchor="end">◀ 실현</text>`);
+    parts.push(`<text class="asof-label" x="${f(tx + 4)}" y="${M.top - 6}">추정 ▶</text>`);
+    if (!opts.compact) parts.push(`<text class="asof-date" x="${f(tx)}" y="${M.top - 30}" text-anchor="middle">기준일 ${escapeHtml(meta.asOf)}</text>`);
   }
 
   // 선 끝 직접 라벨 (값이 가까우면 겹치지 않게 벌림)
@@ -153,17 +166,20 @@ export function renderMainChart(view: ScopedView, meta: Meta, opts: ChartOptions
   const endDist = valueAt(view.steps, x1, 'cumDist');
   let yc = y(endCall);
   let yd = y(endDist);
-  if (Math.abs(yc - yd) < 28) {
+  const gap = opts.compact ? 22 : 28;
+  if (Math.abs(yc - yd) < gap) {
     const mid = (yc + yd) / 2;
     const sign = yc <= yd ? -1 : 1;
-    yc = mid + sign * 14;
-    yd = mid - sign * 14;
+    yc = mid + (sign * gap) / 2;
+    yd = mid - (sign * gap) / 2;
   }
-  const lx = M.left + pw + 10;
-  parts.push(`<line class="line-call key" x1="${lx}" x2="${lx + 12}" y1="${f(yc - 4)}" y2="${f(yc - 4)}"/>`);
-  parts.push(`<text class="end-label" x="${lx + 16}" y="${f(yc)}">Call ${money(endCall)}</text>`);
-  parts.push(`<line class="line-dist key" x1="${lx}" x2="${lx + 12}" y1="${f(yd - 4)}" y2="${f(yd - 4)}"/>`);
-  parts.push(`<text class="end-label" x="${lx + 16}" y="${f(yd)}">Dist ${money(endDist)}</text>`);
+  const lx = M.left + pw + (opts.compact ? 6 : 10);
+  const keyW = opts.compact ? 8 : 12;
+  const endFmt = (v: number) => (opts.compact ? Math.round(v).toLocaleString('en-US') : money(v));
+  parts.push(`<line class="line-call key" x1="${lx}" x2="${lx + keyW}" y1="${f(yc - 4)}" y2="${f(yc - 4)}"/>`);
+  parts.push(`<text class="end-label" x="${lx + keyW + 4}" y="${f(yc)}">Call ${endFmt(endCall)}</text>`);
+  parts.push(`<line class="line-dist key" x1="${lx}" x2="${lx + keyW}" y1="${f(yd - 4)}" y2="${f(yd - 4)}"/>`);
+  parts.push(`<text class="end-label" x="${lx + keyW + 4}" y="${f(yd)}">Dist ${endFmt(endDist)}</text>`);
 
   // 호버 영역: 연도 밴드 전체 (막대보다 넓은 히트 영역)
   parts.push(`<rect class="hover-band" x="0" y="${M.top}" width="0" height="${ph}" visibility="hidden"/>`);
@@ -172,7 +188,7 @@ export function renderMainChart(view: ScopedView, meta: Meta, opts: ChartOptions
   }
 
   const label = `${escapeHtml(view.title)}: ${x0}~${endYear} 연도별 NAV와 누적 Capital Call·Distribution`;
-  return `<svg class="main-chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${label}" data-x0="${x0}" data-x1="${x1}">${parts.join('')}</svg>`;
+  return `<svg class="main-chart${opts.compact ? ' compact' : ''}" viewBox="0 0 ${W} ${H}" role="img" aria-label="${label}" data-x0="${x0}" data-x1="${x1}">${parts.join('')}</svg>`;
 }
 
 /** 호버 툴팁: 연도 밴드에 올리면 그 연도의 값 표시 */
