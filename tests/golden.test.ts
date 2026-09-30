@@ -50,6 +50,8 @@ describe('11.1 정답 케이스', () => {
       expect(tr.map((t) => t.investYear)).toEqual([2020, 2021, 2022, 2023]);
       [2024.19, 2025.19, 2026.19, 2027.19].forEach((v, i) => expectDisplay(tr[i]?.exitTime, v, `집행분 ${i} 회수 시각`));
       expect(tr.map((t) => t.exitYear)).toEqual([2024, 2025, 2026, 2027]);
+      // 9장 v0.6 lastExit: 마지막 집행분 회수 시각
+      expectDisplay(base.lastExit.byFund['AAA_VII'], 2027.19, 'lastExit AAA VII');
     });
 
     it('집행분 순회수 135 (150 − 15)', () => {

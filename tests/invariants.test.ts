@@ -141,6 +141,10 @@ describe('11.2 실무 모드 (7.7)', () => {
     const out = fwd(scenario);
     it('오류 없음', () => expect(out.errors).toEqual([]));
 
+    it('기준일 KPI = 기본 가정 KPI (기준일 이전 고정)', () => {
+      for (const k of ['cumCall', 'cumDist', 'nav', 'dpi', 'tvpi'] as const) expect(Math.abs(out.kpi.total[k] - base.kpi.total[k]), k).toBeLessThan(TOL);
+    });
+
     it('기준일 이전 이벤트 = 기본 가정 결과', () => {
       const key = (e: { time: number; type: string; fundId: string; amount: number }) => `${e.fundId}|${e.type}|${e.time.toFixed(9)}|${e.amount.toFixed(9)}`;
       const before = (o: typeof out) => o.events.filter((e) => e.time < tau).map(key).sort();
@@ -166,9 +170,13 @@ describe('11.2 실무 모드 (7.7)', () => {
   // 손 계산: AAA VII 2023 집행분, N₀ = 75 × 1.18^(2026.745 − 2023) = 139.41
   const aaa2023 = (o: ReturnType<typeof fwd>) => o.tranches.find((t) => t.fundId === 'AAA_VII' && t.investYear === 2023);
 
-  it('MoIC −20%: N₀ 139.41 ≥ 목표 120 → 기준일에 N₀로 회수 (3.3-D)', () => {
-    const t = aaa2023(fwd(uniformScenario(0, -0.2)));
-    expect(Math.abs((t?.exitTime ?? 0) - tau)).toBeLessThan(1e-12);
+  it('MoIC −20%: N₀ 139.41 ≥ 목표 120 → 기준일 직후에 N₀로 회수 (3.3-D, v0.6)', () => {
+    const out = fwd(uniformScenario(0, -0.2));
+    const t = aaa2023(out);
+    expect(t?.exitTime).toBeGreaterThan(tau);
+    expect((t?.exitTime ?? 0) - tau).toBeLessThan(1e-6);
+    // 기준일 시점에는 보유 중: 기준일 KPI = 기본 가정 KPI
+    for (const k of ['cumCall', 'cumDist', 'nav', 'dpi', 'tvpi'] as const) expect(Math.abs(out.kpi.total[k] - base.kpi.total[k]), k).toBeLessThan(TOL);
     expect(Math.abs((t?.exitGross ?? 0) - 139.41)).toBeLessThanOrEqual(0.01);
     expect(Math.abs((t?.carry ?? 0) - 0.2 * (139.4085 - 75))).toBeLessThanOrEqual(0.01);
   });

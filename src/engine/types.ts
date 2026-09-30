@@ -188,5 +188,7 @@ export interface SimOutput {
   readonly series: Scoped<readonly SeriesPoint[]>;
   readonly steps: Scoped<readonly StepPoint[]>;
   readonly kpi: Scoped<KpiPoint>;
+  /** 범위별 마지막 회수 시각 (9장 v0.6) */
+  readonly lastExit: Scoped<YearTime>;
   readonly errors: readonly SimError[];
 }

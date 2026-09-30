@@ -3,7 +3,7 @@
 import { kpiOf, seriesOf, sortEvents, stepsOf, trancheEvents, type AggregateContext, type FundCalc } from './aggregate';
 import { feeEvents } from './fees';
 import { adjustAssumptions, buildTranches, buildTranchesForward } from './tranches';
-import { dateToYearTime, startOf, yearOf, type Year } from './time';
+import { dateToYearTime, startOf, yearOf, type Year, type YearTime } from './time';
 import {
   ASSET_CLASSES,
   type AssetClass,
@@ -42,6 +42,7 @@ function errorOutput(input: SimInput, errors: readonly SimError[]): SimOutput {
     series: { total: [], byClass: emptyByClass(() => []), byFund: {} },
     steps: { total: [], byClass: emptyByClass(() => []), byFund: {} },
     kpi: { total: ZERO_KPI, byClass: emptyByClass(() => ZERO_KPI), byFund: {} },
+    lastExit: { total: startOf(calcStart), byClass: emptyByClass(() => startOf(calcStart)), byFund: {} },
     errors,
   };
 }
@@ -108,6 +109,7 @@ export function simulate(input: SimInput): SimOutput {
     series: scoped(fundCalcs, (g) => seriesOf(g, ctx)),
     steps: scoped(fundCalcs, (g) => stepsOf(g, ctx)),
     kpi: scoped(fundCalcs, (g) => kpiOf(g, ctx)),
+    lastExit: scoped(fundCalcs, (g) => Math.max(options.calcStart, ...g.flatMap((fc) => fc.tranches.map((t) => t.exitTime))) as YearTime),
     errors: [],
   };
 }

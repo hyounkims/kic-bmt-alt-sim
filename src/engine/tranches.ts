@@ -1,5 +1,6 @@
 // 집행분 생성·가정 조정·집행분 계산 (DESIGN.md 7.1~7.3, 전 구간 모드)
 
+import { AFTER_AS_OF_EPSILON } from './constants';
 import type { Fees, Fund, NavBasis, Options, Scenario, Tranche } from './types';
 import { asYear, asYearTime, startOf, type Year, type YearTime } from './time';
 
@@ -77,7 +78,7 @@ export function buildTranches(fund: Fund, a: Assumptions, fees: Fees): Tranche[]
  * 7.7 실무 모드: 기준일 τ_asOf 이전은 기본 가정(base)으로 고정하고 이후만 조정 가정(adj)으로 재계산.
  *   - 기본 가정 회수 시각 T_base ≤ τ_asOf : 기본 가정 결과로 고정 (locked)
  *   - Y ≤ τ_asOf < T_base : N₀ = A(1 + r)^(τ_asOf − Y), 이후 N₀(1 + r′)^(τ − τ_asOf).
- *       τ_r = ln(A·M′ / N₀) / ln(1 + r′), T = τ_asOf + τ_r. N₀ ≥ A·M′이면 τ_asOf에 N₀로 회수 (3.3-D)
+ *       τ_r = ln(A·M′ / N₀) / ln(1 + r′), T = τ_asOf + τ_r. N₀ ≥ A·M′이면 기준일 직후(τ_asOf + ε)에 N₀로 회수 (3.3-D, v0.6)
  *   - Y > τ_asOf : 전 구간 모드와 동일
  */
 export function buildTranchesForward(fund: Fund, base: Assumptions, adj: Assumptions, fees: Fees, asOfTime: YearTime): Tranche[] {
@@ -92,7 +93,7 @@ export function buildTranchesForward(fund: Fund, base: Assumptions, adj: Assumpt
     const n0 = a * Math.pow(1 + base.irr, asOfTime - start);
     const target = a * adj.moic;
     const exceeded = n0 >= target;
-    const exitTime = exceeded ? asOfTime : asYearTime(asOfTime + Math.log(target / n0) / Math.log1p(adj.irr));
+    const exitTime = exceeded ? asYearTime(asOfTime + AFTER_AS_OF_EPSILON) : asYearTime(asOfTime + Math.log(target / n0) / Math.log1p(adj.irr));
     return makeTranche(fund, fees, bt.investYear, a, adj, exitTime, exceeded ? n0 : target, {
       preIrr: base.irr,
       anchorTime: asOfTime,
