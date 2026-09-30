@@ -241,7 +241,7 @@ function renderAssumptions(): string {
     ['시나리오 비교', '인쇄용 5개 시나리오는 전 자산군 동시 적용 (8장, 3.3-A)'],
   ];
   return `<details class="panel assumptions" data-panel="assumptions">
-    <summary><h2>가정 명세</h2><span class="muted">원문 가정과 해석 결정 (DESIGN.md 3장)</span></summary>
+    <summary><h2>가정 명세</h2><span class="muted">원문 가정과 해석 결정</span></summary>
     <dl>${items.map(([k, v]) => `<dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd>`).join('')}</dl>
   </details>`;
 }
