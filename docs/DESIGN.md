@@ -14,7 +14,7 @@
 |---|---|
 | v0.1 | 최초 작성 |
 | v0.2 | BMT 원문 대조 검수 반영. 원문 전문을 부록 A로 수록, 과제 배경 추가. 표시 시간축 연속화(F), 실현/추정 2-스타일 및 인쇄 기준일 고정(G), AI 범위 정의(H), 기술 스택 확정(E). 슬라이더 단위 3%p·20%로 변경. 2페이지 x축 명시. 오프라인 빌드 추가. 실무 모드 기준점을 기준일로 변경(D 재정의) |
-| v0.3 | 마일스톤 순서 조정: 기본 가정 대시보드(M3)를 민감도(M4)·불변 조건 테스트/실무 모드(M5)보다 먼저 구현. 16장 영향 마일스톤 갱신 |
+| v0.3 | 마일스톤 순서 조정: 기본 가정 대시보드(M3)를 민감도(M4)·불변 조건 테스트/실무 모드(M5)보다 먼저 구현. 16장 영향 마일스톤 갱신. 9장 출력 스키마 보강(`funds`, `steps`, `kpi.byClass`·`byFund`), 6장 검증 위치 명시 |
 
 ---
 
@@ -257,6 +257,8 @@ flowchart LR
 - 조정 후 IRR′ ≥ 1%, MoIC′ > 1.0x (3.3-C)
 - `asOf` 유효 날짜
 
+검증 위치 (v0.3): mock 무결성(펀드 12개·약정 3,000)은 앱 진입점에서 검사한다. `simulate` 내부 검증은 구조·범위 검사만 수행해, 11.2 무작위 입력(펀드 수·약정 임의)도 계산할 수 있게 한다. 두 검사 모두 계산 직전에 매번 수행하는 점은 같다.
+
 ---
 
 ## 7. 계산 엔진 `simulate(input) → output`
@@ -335,6 +337,11 @@ flowchart LR
 {
   "meta": { "asOf": "2026-09-30", "asOfTime": 2026.745, "asOfYear": 2026,
             "calcStart": 2015, "displayStart": 2017, "endYear": 2032 },
+  "funds": [
+    { "id": "AAA_VII", "name": "AAA VII", "assetClass": "PE", "type": "fund",
+      "commitment": 300, "vintage": 2020, "investPeriod": 4,
+      "gIRR": 0.18, "gMOIC": 2.0, "irr": 0.18, "moic": 2.0, "lastExitYear": 2027 }
+  ],
   "tranches": [
     { "fundId": "AAA_VII", "investYear": 2020, "amount": 75,
       "irr": 0.18, "moic": 2.0, "tStar": 4.19,
@@ -351,8 +358,15 @@ flowchart LR
     "byClass": { "PE": [], "RE": [], "Infra": [], "PD": [] },
     "byFund":  { "AAA_VII": [] }
   },
+  "steps": {
+    "total":   [ { "time": 2015, "cumCall": 0, "cumDist": 0 } ],
+    "byClass": { "PE": [], "RE": [], "Infra": [], "PD": [] },
+    "byFund":  { "AAA_VII": [] }
+  },
   "kpi": {
-    "total": { "cumCall": 0, "cumDist": 0, "nav": 0, "dpi": 0, "tvpi": 0 }
+    "total":   { "cumCall": 0, "cumDist": 0, "nav": 0, "dpi": 0, "tvpi": 0 },
+    "byClass": { "PE": {}, "RE": {}, "Infra": {}, "PD": {} },
+    "byFund":  { "AAA_VII": {} }
   },
   "errors": []
 }
@@ -363,6 +377,13 @@ flowchart LR
 - `kpi`는 기준일 시각 기준 (누적 이벤트 합, 기준일 시점 평가가치)
 - `series`는 `calcStart`부터 `endYear`까지 전 연도를 포함하며, 표시 범위는 렌더링에서 자름
 - `locked`: 실무 모드에서 고정된 집행분 여부
+
+v0.3 보강 (추가 필드만, 기존 필드 변경 없음). 10.1 보기 범위(전체/자산군/펀드)별 화면을 렌더링 재계산 없이 그리기 위함(4.1 계층 분리):
+
+- `funds`: 펀드 표시 정보. `gIRR`·`gMOIC`는 원 가정, `irr`·`moic`는 조정 후 적용값(7.2), `lastExitYear`는 마지막 집행분 회수 연도(7.4 관리보수 종료 연도)
+- `steps`: 누적 Call·Distribution 계단형 선(3.1-7) 데이터. 이벤트 발생 시각마다 해당 시각 이벤트까지 반영한 누적값. 첫 점은 `calcStart` 시각의 0
+- `kpi.byClass`, `kpi.byFund`: 보기 범위별 KPI (정의는 `kpi.total`과 동일)
+- 오류 시(`errors` 비어 있지 않음) 나머지 필드는 빈 값이며 렌더링하지 않는다
 
 ---
 
