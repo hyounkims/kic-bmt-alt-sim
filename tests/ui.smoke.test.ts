@@ -8,7 +8,10 @@ function mount(asOf = '2026-09-30') {
   const root = document.createElement('div');
   document.body.replaceChildren(root);
   mountApp(root, mockPortfolio(), initialState({ kind: 'total' }, asOf));
-  return root;
+  // 화면 영역만 검사 (인쇄 영역은 print.smoke.test.ts)
+  const screen = root.querySelector<HTMLElement>('.screen-root');
+  if (!screen) throw new Error('screen-root 없음');
+  return screen;
 }
 
 function selectScope(root: HTMLElement, value: string) {

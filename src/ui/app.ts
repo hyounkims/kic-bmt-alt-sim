@@ -9,6 +9,7 @@ import { ASSET_CLASSES, type AssetClass, type KpiPoint, type Options, type Portf
 import { bindChartTooltip, renderMainChart } from './charts/mainChart';
 import { renderSensitivity, sameShift, stepLabel, type Availability, type Settings } from './controls/sensitivity';
 import { escapeHtml, money, multiple, pct, PHASE_LABEL, yearTime } from './format';
+import { renderPrintView } from './print/printView';
 import { CLASS_LABEL, parseScopeKey, scopeKey, selectScope, type Scope, type ScopedView } from './scope';
 
 export interface ViewState {
@@ -272,10 +273,18 @@ export function mountApp(root: HTMLElement, portfolio: Portfolio, initial: ViewS
   let state: ViewState = { ...initial };
   const header = document.createElement('header');
   header.className = 'app-header';
-  header.innerHTML = `<h1>대체투자 현금흐름 시뮬레이션</h1>
-    <p>KIC 대체자산 포트폴리오 12개 펀드 · 약정 $3,000mn · 2017년부터 완전 회수까지 NAV, 누적 Capital Call·Distribution</p>`;
+  header.innerHTML = `<div>
+      <h1>대체투자 현금흐름 시뮬레이션</h1>
+      <p>KIC 대체자산 포트폴리오 12개 펀드 · 약정 $3,000mn · 2017년부터 완전 회수까지 NAV, 누적 Capital Call·Distribution</p>
+    </div>
+    <button type="button" id="print-btn" class="text-btn print-btn" title="A4 가로 2페이지 · 기준일 2026-09-30 고정 · 실무 모드">인쇄 / PDF 저장</button>`;
+  header.querySelector('#print-btn')?.addEventListener('click', () => window.print());
   const body = document.createElement('div');
-  root.replaceChildren(header, body);
+  body.className = 'screen-root';
+  // 인쇄 뷰는 화면 상태와 독립이므로 한 번만 만든다 (10.2 v0.5)
+  const print = document.createElement('div');
+  print.innerHTML = renderPrintView(portfolio);
+  root.replaceChildren(header, body, ...print.childNodes);
 
   const render = () => {
     const c = compute(portfolio, state);

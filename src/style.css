@@ -192,3 +192,50 @@ h2 { font-size: 15px; margin: 0 0 12px; font-weight: 600; }
 .data-table .was { color: var(--text-muted); font-size: 12px; }
 .scenario-table tr.applied td { font-weight: 600; }
 .scenario-table td:last-child { text-align: center; }
+
+/* ── 인쇄 (M5, DESIGN.md 10.2) ─────────────────── */
+.app-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+.print-btn { white-space: nowrap; font-size: 13px; padding: 6px 12px; }
+.print-root { display: none; }
+
+.main-chart.compact .axis-label, .main-chart.compact .axis-unit { font-size: 11px; }
+.main-chart.compact .end-label { font-size: 11px; }
+.main-chart.compact .asof-label { font-size: 10px; }
+
+.print-page { color: #000; }
+.print-head { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 1.5px solid #000; padding-bottom: 4px; margin-bottom: 4px; }
+.print-head h1 { font-size: 15px; margin: 0 0 2px; }
+.print-head h1 span { font-weight: 400; font-size: 12px; color: #333; }
+.print-head p { margin: 0; font-size: 9px; color: #333; }
+.print-page-no { font-size: 10px; color: #333; }
+.print-legend { font-size: 9px; margin: 2px 0 4px; gap: 4px 14px; }
+.print-legend .sw { width: 10px; height: 10px; }
+.ln-print-call { border-top-width: 3px; }
+.print-grid { display: flex; flex-direction: column; gap: 2px; }
+.print-row { display: flex; gap: 4px; align-items: stretch; }
+.print-row-label { writing-mode: vertical-rl; transform: rotate(180deg); font-size: 11px; font-weight: 700; text-align: center; width: 14px; border-right: 1px solid #999; }
+.print-cell { flex: 1 1 0; margin: 0; min-width: 0; border: 1px solid #ccc; padding: 2px 3px 0; }
+.print-cell.is-base { border-color: #000; border-width: 1.5px; }
+.print-cell figcaption { display: flex; justify-content: space-between; font-size: 9px; }
+.print-cell figcaption span { color: #333; font-variant-numeric: tabular-nums; }
+.print-cell .line-call { stroke-width: 2.8; }
+.print-cell .line-dist { stroke-width: 1.3; }
+.print-cell .hit, .print-cell .hover-band { display: none; }
+.print-bottom { display: grid; grid-template-columns: 1.1fr 1fr; gap: 10px; margin-top: 5px; }
+.print-summary { font-size: 9px; }
+.print-summary th, .print-summary td { padding: 1px 6px; }
+.print-summary th { position: static; background: #eee; color: #000; }
+.print-notes { font-size: 8.5px; line-height: 1.35; }
+.print-notes ul { margin: 2px 0 0; padding-left: 14px; }
+
+@page { size: A4 landscape; margin: 7mm; }
+@media print {
+  :root { background: #fff; }
+  body { margin: 0; }
+  #app { max-width: none; padding: 0; margin: 0; }
+  .app-header, .screen-root { display: none !important; }
+  .print-root { display: block; }
+  .print-page { width: 283mm; height: 195mm; overflow: hidden; break-after: page; page-break-after: always; }
+  .print-page:last-child { break-after: auto; page-break-after: auto; }
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
