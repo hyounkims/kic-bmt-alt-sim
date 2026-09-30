@@ -123,7 +123,7 @@ function renderKpi(view: ScopedView, out: SimOutput, baseKpi: KpiPoint | null, n
   return `<section class="kpi-row" aria-label="기준일 KPI">
     ${card('누적 Capital Call', money(k.cumCall), '$mn · 투자 + 관리보수', delta(k.cumCall, b?.cumCall, money, signedMoney))}
     ${card('누적 Distribution', money(k.cumDist), '$mn · 순회수 (성과보수 차감)', delta(k.cumDist, b?.cumDist, money, signedMoney))}
-    ${card('NAV', money(k.nav), `$mn · 기준일 평가가치 (${navLabel})`, delta(k.nav, b?.nav, money, signedMoney))}
+    ${card('기준일 NAV', money(k.nav), `$mn · 기준일 평가가치 (${navLabel}), 연말 NAV와 다름`, delta(k.nav, b?.nav, money, signedMoney))}
     ${card('DPI', multiple(k.dpi), 'Distribution ÷ Call', delta(k.dpi, b?.dpi, multiple, signedMultiple))}
     ${card('TVPI', multiple(k.tvpi), '(Distribution + NAV) ÷ Call', delta(k.tvpi, b?.tvpi, multiple, signedMultiple))}
     <p class="kpi-caption">기준일 ${escapeHtml(out.meta.asOf)} (연 소수 시각 ${yearTime(out.meta.asOfTime)}) 시점 · 진행 연도 ${out.meta.asOfYear}${baseKpi ? ' · 회색 글씨는 기본 가정 대비' : ''}</p>
@@ -214,7 +214,7 @@ function renderScenarioTable(c: Computed, state: ViewState): string {
     })
     .join('');
   return `<section class="panel">
-    <h2>5개 시나리오 비교 <span class="muted">전 자산군 동시 적용 (8장, 3.3-A) · 인쇄본과 같은 구성 · 최대 종료 연도 ${c.scenarios.maxEndYear}</span></h2>
+    <h2>5개 시나리오 비교 <span class="muted">전 자산군 동시 적용 (8장, 3.3-A) · 해석 설정이 기본이면 인쇄본과 같은 수치 · 최대 종료 연도 ${c.scenarios.maxEndYear}</span></h2>
     <div class="table-wrap"><table class="data-table scenario-table">
       <thead><tr><th>시나리오</th><th>종료 연도</th><th>마지막 회수 시각</th><th>최종 누적 Call</th><th>최종 누적 Distribution</th><th>기준일 TVPI</th><th></th></tr></thead>
       <tbody>${rows}</tbody>
@@ -238,10 +238,29 @@ function renderAssumptions(): string {
     ['민감도', 'IRR ±3%p 가감, MoIC ±20% 상대 변동 (설정에서 해석 전환). 3%p·20% 단위 −2~+2단계. IRR·MoIC 동시 조정 가능 (3.3)'],
     ['XXX 연동', 'PE 조정을 XXX(직접투자)에도 같은 폭 적용, 설정에서 분리 가능 (3.3-4)'],
     ['조정 하한', 'IRR′ ≥ 1%, MoIC′ > 1.0x. 위반 단계는 비활성화 — 손실 케이스의 성과보수 규칙이 원문에 없음 (3.3-C)'],
-    ['시나리오 비교', '인쇄용 5개 시나리오는 전 자산군 동시 적용 (8장, 3.3-A)'],
+    ['민감도 해석', '기본(전 구간 재계산)은 모든 집행분을 조정 IRR·MoIC로 투자 시점부터 다시 계산한 가상 시나리오. 실현/추정은 기준일 기준 표시 구분. 실무 모드는 기준일 이전을 기본 가정 결과로 고정하고 이후만 재계산 (3.3-6)'],
+    ['시나리오 비교', '인쇄용 5개 시나리오는 전 자산군 동시 적용, 전 구간 재계산 (8장, 3.3-A)'],
   ];
   return `<details class="panel assumptions" data-panel="assumptions">
     <summary><h2>가정 명세</h2><span class="muted">원문 가정과 해석 결정</span></summary>
+    <dl>${items.map(([k, v]) => `<dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd>`).join('')}</dl>
+  </details>`;
+}
+
+/** 화면 사용 가이드 (10.1 v0.7): 조작법·인쇄 설정 요약. 상세는 사용자 가이드 문서 */
+function renderGuide(): string {
+  const items: [string, string][] = [
+    ['보기 범위', '전체 / 자산군 / 펀드를 선택. 주소 끝에 #fund:AAA_VII, #class:PE 를 붙여 바로 열 수도 있음'],
+    ['기준일', '이전은 실현(채움·실선), 이후는 추정(빗금·점선). 기본값은 오늘'],
+    ['민감도 조정', '자산군별 IRR(±3%p 단위)·MoIC(±20% 단위)를 누르면 즉시 반영. 빗금 버튼은 조정 하한(IRR′ ≥ 1%, MoIC′ > 1.0x) 위반으로 선택 불가. "기본 가정으로 초기화"로 되돌림'],
+    ['비교', '조정하면 차트에 회색 기본 가정 누적선, KPI에 기본 대비 증감, 집행분 표에 괄호로 기본값 표시'],
+    ['해석 설정', 'IRR %p/상대, MoIC 상대/절대, NAV Gross/Net, 민감도 모드(전 구간/실무), XXX 연동'],
+    ['5개 시나리오', '전 자산군 동시 적용 결과 비교. "전 자산군 적용"으로 화면에 반영'],
+    ['차트 툴팁', '연도 위에 마우스를 올리면 그해 NAV·누적값·당해 흐름 표시'],
+    ['인쇄 / PDF', '오른쪽 위 버튼. 기준일 2026-09-30 고정 2페이지. 프린터·Microsoft Print to PDF는 레이아웃 "가로", 용지 "A4" 선택'],
+  ];
+  return `<details class="panel guide" data-panel="guide">
+    <summary><h2>사용 가이드</h2><span class="muted">조작법과 인쇄 설정</span></summary>
     <dl>${items.map(([k, v]) => `<dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd>`).join('')}</dl>
   </details>`;
 }
@@ -256,6 +275,7 @@ export function renderDashboard(c: Computed, state: ViewState): string {
   const xEndYear = Math.max(view.endYear, baseView?.endYear ?? 0);
   const chartOpts = baseView ? { idPrefix: 'main', xEndYear, baseline: baseView.steps } : { idPrefix: 'main', xEndYear };
   return `
+    ${renderGuide()}
     ${renderControls(out, state)}
     ${sensitivity}
     ${renderKpi(view, out, baseView?.kpi ?? null, state.settings.navBasis === 'gross' ? 'Gross' : 'Net')}

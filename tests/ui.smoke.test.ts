@@ -29,6 +29,11 @@ describe('기본 대시보드 (전체, 기준일 2026-09-30)', () => {
 
   it('KPI 카드 5개', () => {
     expect(root.querySelectorAll('.kpi-card')).toHaveLength(5);
+    // v0.7: 기준일 NAV와 연말 NAV 구분
+    expect([...root.querySelectorAll('.kpi-label')].map((l) => l.textContent)).toContain('기준일 NAV');
+    expect(root.querySelector('.year-table thead')?.textContent).toContain('연말 NAV');
+    // v0.7: 화면 사용 가이드
+    expect(root.querySelector('details[data-panel="guide"] summary')?.textContent).toContain('사용 가이드');
     expect(root.querySelector('.kpi-caption')?.textContent).toContain('진행 연도 2026');
   });
 

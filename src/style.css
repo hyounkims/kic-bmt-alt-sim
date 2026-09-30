@@ -130,7 +130,7 @@ h2 { font-size: 15px; margin: 0 0 12px; font-weight: 600; }
 .tranche-table td:last-child, .tranche-table th:last-child { text-align: center; }
 
 /* 가정 명세 */
-.assumptions summary { cursor: pointer; display: flex; align-items: baseline; gap: 10px; list-style: none; }
+.assumptions summary, .guide summary { cursor: pointer; display: flex; align-items: baseline; gap: 10px; list-style: none; }
 .assumptions summary::-webkit-details-marker { display: none; }
 .assumptions summary::before { content: '▸'; color: var(--text-muted); }
 .assumptions[open] summary::before { content: '▾'; }
@@ -246,3 +246,13 @@ h2 { font-size: 15px; margin: 0 0 12px; font-weight: 600; }
   .print-page:last-child { break-after: auto; page-break-after: auto; }
   * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
+
+/* 사용 가이드 (v0.7) */
+.guide summary { display: flex; align-items: baseline; gap: 10px; list-style: none; }
+.guide summary::-webkit-details-marker { display: none; }
+.guide summary::before { content: '▸'; color: var(--text-muted); }
+.guide[open] summary::before { content: '▾'; }
+.guide summary h2 { margin: 0; }
+.guide dl { display: grid; grid-template-columns: 110px 1fr; gap: 6px 16px; margin: 14px 0 0; font-size: 13px; }
+.guide dt { color: var(--text-secondary); }
+.guide dd { margin: 0; }

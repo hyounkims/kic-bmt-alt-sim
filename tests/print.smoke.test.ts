@@ -31,11 +31,11 @@ describe('인쇄 뷰', () => {
     expect(pages[1]?.querySelector('h1')?.textContent).toContain('AAA VII');
   });
 
-  it('x축: 1페이지 2017~2033, 2페이지 2020~2033 (최대 endYear, v0.4 확정)', () => {
+  it('x축: 1페이지 2017~2033, 2페이지 2020~2028 (각 대상의 시나리오 최대 종료 연도, v0.7)', () => {
     const svg1 = pages[0]?.querySelector('svg.main-chart');
     const svg2 = pages[1]?.querySelector('svg.main-chart');
     expect([svg1?.getAttribute('data-x0'), svg1?.getAttribute('data-x1')]).toEqual(['2017', '2034']);
-    expect([svg2?.getAttribute('data-x0'), svg2?.getAttribute('data-x1')]).toEqual(['2020', '2034']);
+    expect([svg2?.getAttribute('data-x0'), svg2?.getAttribute('data-x1')]).toEqual(['2020', '2029']);
     expect(yearLabels(pages[0]!)).toBe(18); // 2017~2033 연도 경계 + 끝
   });
 
@@ -57,24 +57,16 @@ describe('인쇄 뷰', () => {
     }
   });
 
-  it('1페이지 실무 모드: 실현 막대·실현 실선이 5개 시나리오 모두 기본과 같음 (MoIC −20% 기준일 직후 회수 포함, v0.6)', () => {
-    const p = pages[0]!;
-    expect(p.getAttribute('data-mode')).toBe('forward');
-    const realized = (key: string) => {
-      const cell = p.querySelector(`.print-cell[data-scenario="${key}"]`);
-      const bars = [...(cell?.querySelectorAll('.bar-real') ?? [])].map((b) => b.getAttribute('d'));
-      const lines = [...(cell?.querySelectorAll('.line:not(.line-est):not(.key)') ?? [])].map((l) => l.getAttribute('d'));
-      return [...bars, ...lines].join('|');
-    };
-    const base = realized('base');
-    expect(base.length).toBeGreaterThan(0);
-    for (const key of ['irrDown', 'irrUp', 'moicDown', 'moicUp']) expect(realized(key), key).toBe(base);
+  it('두 페이지 모두 전 구간 재계산, 가정 요약에 민감도 해석 명기 (v0.7)', () => {
+    for (const p of pages) {
+      expect(p.getAttribute('data-mode')).toBe('full');
+      expect(p.querySelector('.print-head p')?.textContent).toContain('민감도는 투자 시점부터 조정 가정으로 재계산');
+      expect(p.querySelector('.print-notes')?.textContent).toContain('가상 시나리오');
+    }
   });
 
-  it('2페이지 전 구간 모드 명기, 마지막 회수 시각으로 IRR 회수기간 변동 표시 (12장 PE t*)', () => {
+  it('2페이지 마지막 회수 시각으로 IRR 회수기간 변동 표시 (12장 PE t*)', () => {
     const p = pages[1]!;
-    expect(p.getAttribute('data-mode')).toBe('full');
-    expect(p.querySelector('.print-head p')?.textContent).toContain('전 구간 재계산');
     const lastExit = [...p.querySelectorAll('.print-summary td.last-exit')].map((td) => td.textContent);
     // 기본 2023 + 4.19, IRR −3%p 2023 + 4.96, IRR +3%p 2023 + 3.64
     expect(lastExit.slice(0, 3)).toEqual(['2027.19', '2027.96', '2026.64']);
@@ -98,5 +90,18 @@ describe('인쇄 뷰는 화면 상태와 독립', () => {
     mountApp(root, mockPortfolio(), initialState({ kind: 'total' }, '2030-06-30'));
     expect(root.querySelector('.print-root .print-head p')?.textContent).toContain('기준일 2026-09-30');
     expect(root.querySelector('.screen-root .kpi-caption')?.textContent).toContain('2030-06-30');
+  });
+});
+
+describe('화면 시나리오 표와 인쇄 요약 표 일치 (v0.7)', () => {
+  it('기본 해석·전 구간 상태에서 화면 5개 시나리오 수치 = 인쇄 1페이지 요약 수치', () => {
+    const root = document.createElement('div');
+    document.body.replaceChildren(root);
+    mountApp(root, mockPortfolio(), initialState({ kind: 'total' }, '2026-09-30'));
+    const rows = (sel: string) =>
+      [...root.querySelectorAll(`${sel} tbody tr`)].map((tr) => [...tr.querySelectorAll('td')].map((td) => td.textContent?.trim()).slice(0, 5).join('|'));
+    const screen = rows('.screen-root .scenario-table');
+    expect(screen).toHaveLength(5);
+    expect(screen).toEqual(rows('.print-page[data-page="1"] .print-summary'));
   });
 });
