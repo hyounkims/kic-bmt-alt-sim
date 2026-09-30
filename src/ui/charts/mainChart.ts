@@ -19,19 +19,36 @@ export interface ChartOptions {
   readonly yMaxValue?: number;
   /** 소형 차트: 여백·라벨 축소 (10.2 인쇄) */
   readonly compact?: boolean;
+  /** y축 숫자·단위 표시 (기본 true). 공통 축 소형 차트는 첫 열만 (10.2 v0.8) */
+  readonly yLabels?: boolean;
+  /** 기준일 선 옆 "실현/추정" 글자 (기본 true). 소형 차트는 첫 열만 (10.2 v0.8) */
+  readonly asOfText?: boolean;
+  /** 마지막 실현 연도 NAV 막대 위 값 라벨 (기본: 소형 차트가 아니면 true, 10.3 v0.8) */
+  readonly valueLabel?: boolean;
 }
 
 const MARGIN = { top: 48, right: 112, bottom: 34, left: 60 };
 const MARGIN_COMPACT = { top: 24, right: 84, bottom: 22, left: 44 };
 
 /** 1·2·2.5·5 × 10^k 단위의 보기 좋은 눈금 */
-export function niceTicks(max: number, target = 5): number[] {
+/**
+ * 보기 좋은 눈금 (10.3 v0.8): 1·2·2.5·5 × 10^k 단위 중 눈금 칸 수가 minSteps~maxSteps이고
+ * 최댓값에 가장 가까운(위 여백이 가장 작은) 단위를 고른다. 예) 6,117 → 0~7,000 (1,000 단위)
+ */
+export function niceTicks(max: number, minSteps = 4, maxSteps = 7): number[] {
   if (!(max > 0)) return [0];
-  const raw = max / target;
-  const mag = 10 ** Math.floor(Math.log10(raw));
-  const step = ([1, 2, 2.5, 5, 10].map((m) => m * mag).find((s) => s >= raw) ?? 10 * mag);
+  const mag = 10 ** Math.floor(Math.log10(max));
+  let best: { step: number; top: number } | null = null;
+  for (const m of [0.1, 0.2, 0.25, 0.5, 1, 2, 2.5, 5, 10]) {
+    const step = m * mag;
+    const n = Math.ceil(max / step - 1e-9);
+    if (n < minSteps || n > maxSteps) continue;
+    const top = n * step;
+    if (!best || top < best.top || (top === best.top && step > best.step)) best = { step, top };
+  }
+  const step = best?.step ?? mag;
   const ticks: number[] = [];
-  for (let v = 0; v < max + step * 0.999; v += step) ticks.push(v);
+  for (let v = 0; v < max + step * 0.999; v += step) ticks.push(Math.round(v * 1e6) / 1e6);
   return ticks;
 }
 
@@ -97,11 +114,12 @@ export function renderMainChart(view: ScopedView, meta: Meta, opts: ChartOptions
   }
 
   // 가로 눈금선 + y축 라벨
+  const showY = opts.yLabels !== false;
   for (const v of ticks) {
     parts.push(`<line class="grid" x1="${M.left}" x2="${M.left + pw}" y1="${f(y(v))}" y2="${f(y(v))}"/>`);
-    parts.push(`<text class="axis-label" x="${M.left - 8}" y="${f(y(v) + 4)}" text-anchor="end">${money(v).replace(/\.0$/, '')}</text>`);
+    if (showY) parts.push(`<text class="axis-label" x="${M.left - 8}" y="${f(y(v) + 4)}" text-anchor="end">${money(v).replace(/\.0$/, '')}</text>`);
   }
-  parts.push(`<text class="axis-unit" x="${M.left - 8}" y="${M.top - 14}" text-anchor="end">$mn</text>`);
+  if (showY) parts.push(`<text class="axis-unit" x="${M.left - 8}" y="${M.top - 14}" text-anchor="end">$mn</text>`);
 
   // 연도 경계(1월 1일)와 연도 라벨
   for (let yr = x0; yr <= endYear; yr++) {
@@ -132,6 +150,14 @@ export function renderMainChart(view: ScopedView, meta: Meta, opts: ChartOptions
   }
   parts.push(`<line class="baseline" x1="${M.left}" x2="${M.left + pw}" y1="${f(y(0))}" y2="${f(y(0))}"/>`);
 
+  // 선택적 값 라벨: 마지막 실현 연도 막대 위 (10.3 v0.8)
+  if (opts.valueLabel ?? !opts.compact) {
+    const lastReal = [...bars].reverse().find((p) => p.nav > 0 && p.year + 1 <= tau);
+    if (lastReal) {
+      parts.push(`<text class="bar-value" x="${f(x(lastReal.year + 0.5))}" y="${f(y(lastReal.nav) - 7)}" text-anchor="middle">${Math.round(lastReal.nav).toLocaleString('en-US')}</text>`);
+    }
+  }
+
   // 계단형 누적선: 기준일 이전 실선, 이후 점선
   const stepPath = (key: 'cumCall' | 'cumDist', a: number, b: number, steps: readonly StepPoint[] = view.steps): string => {
     let d = `M${f(x(a))},${f(y(valueAt(steps, a, key)))}`;
@@ -156,8 +182,8 @@ export function renderMainChart(view: ScopedView, meta: Meta, opts: ChartOptions
   if (tau >= x0 && tau <= x1) {
     const tx = x(tau);
     parts.push(`<line class="asof-line" x1="${f(tx)}" x2="${f(tx)}" y1="${opts.compact ? M.top - 18 : M.top - 24}" y2="${M.top + ph}"/>`);
-    parts.push(`<text class="asof-label" x="${f(tx - 4)}" y="${M.top - 6}" text-anchor="end">◀ 실현</text>`);
-    parts.push(`<text class="asof-label" x="${f(tx + 4)}" y="${M.top - 6}">추정 ▶</text>`);
+    if (opts.asOfText !== false) parts.push(`<text class="asof-label" x="${f(tx - 4)}" y="${M.top - 6}" text-anchor="end">◀ 실현</text>`);
+    if (opts.asOfText !== false) parts.push(`<text class="asof-label" x="${f(tx + 4)}" y="${M.top - 6}">추정 ▶</text>`);
     if (!opts.compact) parts.push(`<text class="asof-date" x="${f(tx)}" y="${M.top - 30}" text-anchor="middle">기준일 ${escapeHtml(meta.asOf)}</text>`);
   }
 
