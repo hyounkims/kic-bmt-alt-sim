@@ -144,3 +144,51 @@ h2 { font-size: 15px; margin: 0 0 12px; font-weight: 600; }
 .error-panel h2 { color: var(--error); }
 .error-panel ul { margin: 0; padding-left: 18px; }
 .error-panel code { font-size: 12px; }
+
+/* ── 민감도 (M4) ───────────────────────────── */
+:root { --c-base: #9a988f; --selected-bg: #0b0b0b; --selected-fg: #ffffff; }
+.sens-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.sens-head h2 { margin-bottom: 8px; }
+.text-btn { font: inherit; font-size: 12px; background: none; border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; cursor: pointer; color: var(--text-primary); }
+.text-btn:hover:not(:disabled) { background: var(--surface-0); }
+.text-btn:disabled { color: var(--text-muted); cursor: default; }
+.notice { margin: 0 0 10px; padding: 6px 10px; font-size: 12px; background: #fff7e6; border: 1px solid #f0d9a8; border-radius: 6px; }
+.sens-grid { display: grid; gap: 8px; }
+.sens-row { display: grid; grid-template-columns: minmax(220px, 1.2fr) auto auto; gap: 8px 20px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--grid); }
+.sens-row:last-child { border-bottom: 0; }
+.sens-label { display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
+.sens-class { font-weight: 600; }
+.sens-values { font-size: 12px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.sens-values strong { color: var(--text-primary); }
+.sens-direct { display: block; color: var(--text-muted); }
+.seg { display: inline-flex; align-items: center; gap: 0; }
+.seg-name { font-size: 12px; color: var(--text-secondary); width: 40px; }
+.seg-btn {
+  font: inherit; font-size: 12px; font-variant-numeric: tabular-nums; min-width: 52px; padding: 5px 8px;
+  border: 1px solid var(--border); background: var(--surface-1); color: var(--text-primary); cursor: pointer; margin-left: -1px;
+}
+.seg-btn:first-of-type { border-radius: 6px 0 0 6px; }
+.seg-btn:last-of-type { border-radius: 0 6px 6px 0; }
+.seg-btn:hover:not(:disabled):not(.selected) { background: var(--surface-0); }
+.seg-btn.selected { background: var(--selected-bg); color: var(--selected-fg); border-color: var(--selected-bg); position: relative; }
+.seg-btn:disabled { color: #c3c1ba; background: repeating-linear-gradient(135deg, var(--surface-1) 0 4px, #f1f0ec 4px 6px); cursor: not-allowed; }
+.blocked { margin-top: 10px; font-size: 12px; color: var(--text-secondary); }
+.blocked summary { cursor: pointer; }
+.blocked ul { margin: 6px 0 0; padding-left: 18px; }
+.settings { margin-top: 12px; border-top: 1px solid var(--grid); padding-top: 10px; }
+.settings summary { cursor: pointer; font-size: 13px; color: var(--text-secondary); }
+.settings-grid { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: flex-end; margin-top: 10px; }
+.settings-grid .control select { min-width: 200px; }
+.check { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; padding-bottom: 6px; }
+@media (max-width: 900px) { .sens-row { grid-template-columns: 1fr; } }
+
+.kpi-delta { font-size: 12px; color: var(--text-muted); font-variant-numeric: tabular-nums; margin-bottom: 2px; }
+.kpi-delta strong { color: var(--text-primary); font-weight: 600; }
+.ln-base { border-color: var(--c-base); border-top-width: 1.5px; }
+.main-chart .line-base { stroke: var(--c-base); stroke-width: 1.5; opacity: 0.9; }
+.main-chart .line-base-dist { stroke-dasharray: 1 3; stroke-linecap: round; }
+.chart-tooltip tr.base th, .chart-tooltip tr.base td { color: var(--text-muted); }
+.chart-tooltip tr.base:first-of-type th, .chart-tooltip tr.base:first-of-type td { padding-top: 5px; }
+.data-table .was { color: var(--text-muted); font-size: 12px; }
+.scenario-table tr.applied td { font-weight: 600; }
+.scenario-table td:last-child { text-align: center; }

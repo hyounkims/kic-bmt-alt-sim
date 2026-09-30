@@ -1,14 +1,13 @@
 // @vitest-environment happy-dom
 import { beforeEach, describe, expect, it } from 'vitest';
-import { mountApp, renderDashboard } from '../src/ui/app';
-import { simulate } from '../src/engine/simulate';
-import { baseInput, mockPortfolio } from './fixtures';
+import { compute, initialState, mountApp, renderDashboard } from '../src/ui/app';
+import { mockPortfolio } from './fixtures';
 
 // M3 화면 구조 스모크 테스트 (실제 simulate 출력으로 렌더링)
 function mount(asOf = '2026-09-30') {
   const root = document.createElement('div');
   document.body.replaceChildren(root);
-  mountApp(root, mockPortfolio(), { scope: { kind: 'total' }, asOf });
+  mountApp(root, mockPortfolio(), initialState({ kind: 'total' }, asOf));
   return root;
 }
 
@@ -16,7 +15,7 @@ function selectScope(root: HTMLElement, value: string) {
   const sel = root.querySelector<HTMLSelectElement>('#scope-select');
   if (!sel) throw new Error('scope-select 없음');
   sel.value = value;
-  sel.dispatchEvent(new Event('change'));
+  sel.dispatchEvent(new Event('change', { bubbles: true }));
 }
 
 describe('기본 대시보드 (전체, 기준일 2026-09-30)', () => {
@@ -86,7 +85,7 @@ describe('기본 대시보드 (전체, 기준일 2026-09-30)', () => {
     const input = root.querySelector<HTMLInputElement>('#asof-input');
     if (!input) throw new Error('asof-input 없음');
     input.value = '2030-06-30';
-    input.dispatchEvent(new Event('change'));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
     const real = [...root.querySelectorAll('.bar-real')].map((b) => Number(b.getAttribute('data-year')));
     expect(real[real.length - 1]).toBe(2029);
     expect(root.querySelector('.kpi-caption')?.textContent).toContain('진행 연도 2030');
@@ -95,11 +94,87 @@ describe('기본 대시보드 (전체, 기준일 2026-09-30)', () => {
 
 describe('오류 표시', () => {
   it('errors가 있으면 오류 패널만 렌더링', () => {
-    const out = simulate(baseInput({ options: { asOf: '2026-02-30' } }));
+    const state = initialState({ kind: 'total' }, '2026-02-30');
     const div = document.createElement('div');
-    div.innerHTML = renderDashboard(out, { scope: { kind: 'total' }, asOf: '2026-02-30' });
+    div.innerHTML = renderDashboard(compute(mockPortfolio(), state), state);
     expect(div.querySelector('.error-panel')).not.toBeNull();
     expect(div.querySelector('.main-chart')).toBeNull();
     expect(div.textContent).toContain('AS_OF');
+  });
+});
+
+// M4 민감도 (DESIGN.md 3.3, 10.1 v0.4)
+function click(root: HTMLElement, selector: string) {
+  const b = root.querySelector<HTMLButtonElement>(selector);
+  if (!b) throw new Error(`${selector} 없음`);
+  b.click();
+}
+const shiftBtn = (cls: string, kind: string, shift: number) => `button[data-class="${cls}"][data-kind="${kind}"][data-shift="${shift}"]`;
+const cellText = (root: HTMLElement, tranche: string, cls: string) => root.querySelector(`tr[data-tranche="${tranche}"] td.${cls}`)?.textContent ?? '';
+
+describe('민감도 조정 (M4)', () => {
+  let root: HTMLElement;
+  beforeEach(() => {
+    root = mount();
+  });
+
+  it('자산군 4개 × IRR·MoIC 5단계, 기본은 0 선택', () => {
+    expect(root.querySelectorAll('.sens-row')).toHaveLength(4);
+    expect(root.querySelectorAll('.seg-btn')).toHaveLength(40);
+    expect(root.querySelectorAll('.seg-btn.selected')).toHaveLength(8);
+    expect(root.querySelector('.line-base')).toBeNull();
+  });
+
+  it('3.3-C: RE·PD MoIC −40%만 비활성, 사유 표시', () => {
+    const disabled = [...root.querySelectorAll<HTMLButtonElement>('.seg-btn:disabled')].map((b) => `${b.dataset.class} ${b.dataset.kind} ${b.dataset.shift}`);
+    expect(disabled).toEqual(['RE moic -0.4', 'PD moic -0.4']);
+    expect(root.querySelector(shiftBtn('RE', 'moic', -0.4))?.getAttribute('title')).toContain('CCC V: 조정 후 MoIC 0.96x');
+  });
+
+  it('11.1 회수 시각 이동: PE IRR −3%p → AAA VII 2020 집행분 t* 4.19 → 4.96, 회수 시각 2024.19 → 2024.96', () => {
+    click(root, shiftBtn('PE', 'irr', -0.03));
+    expect(cellText(root, 'AAA_VII:2020', 'tstar')).toBe('4.96 (4.19)');
+    expect(cellText(root, 'AAA_VII:2020', 'exit-time')).toBe('2024.96 (2024.19)');
+    expect(cellText(root, 'XXX:2024', 'tstar')).toBe('3.83 (3.49)'); // XXX도 PE 조정 적용 (3.3-4)
+    expect(root.querySelectorAll('.line-base')).toHaveLength(2);
+    expect(root.querySelectorAll('.kpi-delta').length).toBeGreaterThan(0);
+    expect(root.querySelector(shiftBtn('PE', 'irr', -0.03))?.classList.contains('selected')).toBe(true);
+  });
+
+  it('XXX 분리(3.3-4): PE IRR −3%p에도 XXX t* 3.49 유지', () => {
+    const cb = root.querySelector<HTMLInputElement>('input[data-setting="applyToDirect"]');
+    if (!cb) throw new Error('applyToDirect 없음');
+    cb.checked = false;
+    cb.dispatchEvent(new Event('change', { bubbles: true }));
+    click(root, shiftBtn('PE', 'irr', -0.03));
+    expect(cellText(root, 'XXX:2024', 'tstar')).toBe('3.49');
+    expect(cellText(root, 'AAA_VII:2020', 'tstar')).toBe('4.96 (4.19)');
+  });
+
+  it('시나리오 표: 5행, MoIC +20% 전 자산군 적용 → x축 2033까지, 초기화로 복귀', () => {
+    expect(root.querySelectorAll('.scenario-table tbody tr')).toHaveLength(5);
+    click(root, 'button[data-preset="moicUp"]');
+    expect(root.querySelectorAll('.seg-btn.selected[data-kind="moic"][data-shift="0.2"]')).toHaveLength(4);
+    expect(root.querySelectorAll('.hit')).toHaveLength(17); // 2017~2033
+    expect(root.querySelector('.scenario-table tr.applied td')?.textContent).toBe('MoIC +20%');
+    click(root, '#reset-shifts');
+    expect(root.querySelectorAll('.seg-btn.selected[data-shift="0"]')).toHaveLength(8);
+    expect(root.querySelector('.line-base')).toBeNull();
+  });
+
+  it('해석 변경으로 하한 위반 시 0으로 되돌리고 알림', () => {
+    const sel = () => root.querySelector<HTMLSelectElement>('select[data-setting="moicShiftMode"]');
+    const setMode = (v: string) => {
+      const s = sel();
+      if (!s) throw new Error('moicShiftMode 없음');
+      s.value = v;
+      s.dispatchEvent(new Event('change', { bubbles: true }));
+    };
+    setMode('absolute'); // RE 1.6 − 0.40 = 1.20x 허용
+    click(root, shiftBtn('RE', 'moic', -0.4));
+    expect(root.querySelector(shiftBtn('RE', 'moic', -0.4))?.classList.contains('selected')).toBe(true);
+    setMode('relative'); // RE 1.6 × 0.6 = 0.96x 위반 → 0
+    expect(root.querySelector(shiftBtn('RE', 'moic', 0))?.classList.contains('selected')).toBe(true);
+    expect(root.querySelector('.notice')?.textContent).toContain('RE MoIC −40%');
   });
 });

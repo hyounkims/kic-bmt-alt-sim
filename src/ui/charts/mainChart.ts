@@ -13,6 +13,8 @@ export interface ChartOptions {
   readonly xEndYear?: number;
   readonly width?: number;
   readonly height?: number;
+  /** 기본 가정 누적선 (조정이 있을 때 회색 비교선, 10.1 v0.4) */
+  readonly baseline?: readonly StepPoint[];
 }
 
 const M = { top: 48, right: 112, bottom: 34, left: 60 };
@@ -50,7 +52,7 @@ export function renderMainChart(view: ScopedView, meta: Meta, opts: ChartOptions
   const id = (s: string) => `${opts.idPrefix}-${s}`;
 
   const bars = view.series.filter((p) => p.year >= x0 && p.year <= endYear);
-  const inRange = view.steps.filter((p) => p.time <= x1);
+  const inRange = [...view.steps, ...(opts.baseline ?? [])].filter((p) => p.time <= x1);
   const maxVal = Math.max(
     0,
     ...bars.map((p) => p.nav),
@@ -118,14 +120,19 @@ export function renderMainChart(view: ScopedView, meta: Meta, opts: ChartOptions
   parts.push(`<line class="baseline" x1="${M.left}" x2="${M.left + pw}" y1="${f(y(0))}" y2="${f(y(0))}"/>`);
 
   // 계단형 누적선: 기준일 이전 실선, 이후 점선
-  const stepPath = (key: 'cumCall' | 'cumDist', a: number, b: number): string => {
-    let d = `M${f(x(a))},${f(y(valueAt(view.steps, a, key)))}`;
-    for (const p of view.steps) {
+  const stepPath = (key: 'cumCall' | 'cumDist', a: number, b: number, steps: readonly StepPoint[] = view.steps): string => {
+    let d = `M${f(x(a))},${f(y(valueAt(steps, a, key)))}`;
+    for (const p of steps) {
       if (p.time <= a || p.time > b) continue;
       d += `H${f(x(p.time))}V${f(y(p[key]))}`;
     }
     return `${d}H${f(x(b))}`;
   };
+  if (opts.baseline) {
+    for (const key of ['cumCall', 'cumDist'] as const) {
+      parts.push(`<path class="line line-base line-base-${key === 'cumCall' ? 'call' : 'dist'}" d="${stepPath(key, x0, x1, opts.baseline)}"/>`);
+    }
+  }
   for (const key of ['cumCall', 'cumDist'] as const) {
     const cls = key === 'cumCall' ? 'line-call' : 'line-dist';
     if (tau > x0) parts.push(`<path class="line ${cls}" d="${stepPath(key, x0, Math.min(tau, x1))}"/>`);
@@ -169,12 +176,13 @@ export function renderMainChart(view: ScopedView, meta: Meta, opts: ChartOptions
 }
 
 /** 호버 툴팁: 연도 밴드에 올리면 그 연도의 값 표시 */
-export function bindChartTooltip(container: HTMLElement, series: readonly SeriesPoint[]): void {
+export function bindChartTooltip(container: HTMLElement, series: readonly SeriesPoint[], baseSeries?: readonly SeriesPoint[]): void {
   const svg = container.querySelector<SVGSVGElement>('svg.main-chart');
   const tip = container.querySelector<HTMLDivElement>('.chart-tooltip');
   const band = svg?.querySelector<SVGRectElement>('.hover-band');
   if (!svg || !tip || !band) return;
   const byYear = new Map(series.map((p) => [p.year as number, p]));
+  const baseByYear = new Map((baseSeries ?? []).map((p) => [p.year as number, p]));
 
   const hide = () => {
     tip.hidden = true;
@@ -198,6 +206,14 @@ export function bindChartTooltip(container: HTMLElement, series: readonly Series
         <tr class="sub"><th>당해 투자 Call</th><td>${money(p.callInvest)}</td></tr>
         <tr class="sub"><th>당해 관리보수</th><td>${money(p.callFee)}</td></tr>
         <tr class="sub"><th>당해 Distribution</th><td>${money(p.dist)}</td></tr>
+        ${(() => {
+          const b = baseByYear.get(year);
+          return b
+            ? `<tr class="base"><th>기본 가정 연말 NAV</th><td>${money(b.nav)}</td></tr>
+               <tr class="base"><th>기본 가정 누적 Call</th><td>${money(b.cumCall)}</td></tr>
+               <tr class="base"><th>기본 가정 누적 Distribution</th><td>${money(b.cumDist)}</td></tr>`
+            : '';
+        })()}
       </table>`;
     tip.hidden = false;
     const box = container.getBoundingClientRect();

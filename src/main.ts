@@ -2,7 +2,7 @@
 import './style.css';
 import mock from './data/portfolio.mock.json';
 import { checkMockIntegrity, parsePortfolio } from './engine/validate';
-import { mountApp, renderErrors } from './ui/app';
+import { initialState, mountApp, renderErrors } from './ui/app';
 import { localIsoDate } from './ui/format';
 import { parseScopeKey } from './ui/scope';
 
@@ -16,6 +16,6 @@ if (root) {
     // 화면 기준일 기본값 = 오늘 (3.2). 로컬 날짜 사용
     // 보기 범위는 URL 해시로 지정 가능 (예: #fund:AAA_VII, #class:PE)
     const scope = parseScopeKey(decodeURIComponent(location.hash.slice(1)));
-    mountApp(root, portfolio, { scope, asOf: localIsoDate(new Date()) });
+    mountApp(root, portfolio, initialState(scope, localIsoDate(new Date())));
   }
 }
