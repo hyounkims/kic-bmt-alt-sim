@@ -1,0 +1,17 @@
+{
+  "funds": [
+    { "id": "AAA_VI",   "assetClass": "PE",    "name": "AAA VI",   "type": "fund",   "commitment": 200, "vintage": 2017, "investPeriod": 4, "gIRR": 0.18, "gMOIC": 2.0 },
+    { "id": "AAA_VII",  "assetClass": "PE",    "name": "AAA VII",  "type": "fund",   "commitment": 300, "vintage": 2020, "investPeriod": 4, "gIRR": 0.18, "gMOIC": 2.0 },
+    { "id": "BBB_VIII", "assetClass": "PE",    "name": "BBB VIII", "type": "fund",   "commitment": 200, "vintage": 2022, "investPeriod": 4, "gIRR": 0.18, "gMOIC": 2.0 },
+    { "id": "BBB_IX",   "assetClass": "PE",    "name": "BBB IX",   "type": "fund",   "commitment": 300, "vintage": 2025, "investPeriod": 4, "gIRR": 0.18, "gMOIC": 2.0 },
+    { "id": "XXX",      "assetClass": "PE",    "name": "XXX",      "type": "direct", "commitment": 400, "vintage": 2024, "investPeriod": 1, "gIRR": 0.30, "gMOIC": 2.5 },
+    { "id": "CCC_V",    "assetClass": "RE",    "name": "CCC V",    "type": "fund",   "commitment": 200, "vintage": 2018, "investPeriod": 5, "gIRR": 0.12, "gMOIC": 1.6 },
+    { "id": "CCC_VI",   "assetClass": "RE",    "name": "CCC VI",   "type": "fund",   "commitment": 300, "vintage": 2022, "investPeriod": 5, "gIRR": 0.12, "gMOIC": 1.6 },
+    { "id": "DDD_VI",   "assetClass": "Infra", "name": "DDD VI",   "type": "fund",   "commitment": 200, "vintage": 2015, "investPeriod": 6, "gIRR": 0.14, "gMOIC": 1.8 },
+    { "id": "DDD_VII",  "assetClass": "Infra", "name": "DDD VII",  "type": "fund",   "commitment": 200, "vintage": 2018, "investPeriod": 6, "gIRR": 0.14, "gMOIC": 1.8 },
+    { "id": "EEE_VI",   "assetClass": "Infra", "name": "EEE VI",   "type": "fund",   "commitment": 200, "vintage": 2020, "investPeriod": 6, "gIRR": 0.14, "gMOIC": 1.8 },
+    { "id": "FFF_VI",   "assetClass": "PD",    "name": "FFF VI",   "type": "fund",   "commitment": 200, "vintage": 2023, "investPeriod": 3, "gIRR": 0.10, "gMOIC": 1.4 },
+    { "id": "FFF_VII",  "assetClass": "PD",    "name": "FFF VII",  "type": "fund",   "commitment": 300, "vintage": 2026, "investPeriod": 3, "gIRR": 0.10, "gMOIC": 1.4 }
+  ],
+  "fees": { "mgmtInvest": 0.02, "mgmtPost": 0.01, "carry": 0.20 }
+}
