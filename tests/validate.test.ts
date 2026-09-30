@@ -71,7 +71,7 @@ describe('validateInput', () => {
     expect(errors.some((e) => e.message.includes('DDD VI: vintage 2015 < calcStart 2016'))).toBe(true);
   });
 
-  it('실무 모드는 M6 전까지 명시적 오류', () => {
-    expect(validateInput(baseInput({ options: { sensitivityMode: 'forward' } })).map((e) => e.code)).toEqual(['NOT_IMPLEMENTED']);
+  it('실무 모드(7.7)도 유효한 입력', () => {
+    expect(validateInput(baseInput({ options: { sensitivityMode: 'forward' } }))).toEqual([]);
   });
 });

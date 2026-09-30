@@ -2,7 +2,7 @@
 
 import { kpiOf, seriesOf, sortEvents, stepsOf, trancheEvents, type AggregateContext, type FundCalc } from './aggregate';
 import { feeEvents } from './fees';
-import { adjustAssumptions, buildTranches } from './tranches';
+import { adjustAssumptions, buildTranches, buildTranchesForward } from './tranches';
 import { dateToYearTime, startOf, yearOf, type Year } from './time';
 import {
   ASSET_CLASSES,
@@ -53,12 +53,17 @@ export function simulate(input: SimInput): SimOutput {
   const { portfolio, scenario, options } = input;
   const { fees } = portfolio;
 
-  // 7.1~7.4 펀드별 계산 (가정 조정 → 집행분 → 관리보수)
+  const asOfTime = dateToYearTime(options.asOf);
+
+  // 7.1~7.4 펀드별 계산 (가정 조정 → 집행분 → 관리보수). 실무 모드는 7.7
   const fundCalcs: FundCalc[] = [];
   const funds: FundInfo[] = [];
   for (const fund of portfolio.funds) {
     const a = adjustAssumptions(fund, scenario, options);
-    const tranches = buildTranches(fund, a, fees);
+    const tranches =
+      options.sensitivityMode === 'forward'
+        ? buildTranchesForward(fund, { irr: fund.gIRR, moic: fund.gMOIC }, a, fees, asOfTime)
+        : buildTranches(fund, a, fees);
     const events = [...trancheEvents(tranches), ...feeEvents(fund, tranches, fees)];
     fundCalcs.push({ fund, tranches, events });
     funds.push({
@@ -79,7 +84,6 @@ export function simulate(input: SimInput): SimOutput {
 
   // 종료 연도: 마지막 회수 연도 (관리보수 종료 연도와 같음)
   const endYear = Math.max(options.calcStart, ...funds.map((f) => f.lastExitYear)) as Year;
-  const asOfTime = dateToYearTime(options.asOf);
   const ctx: AggregateContext = {
     calcStart: options.calcStart,
     endYear,

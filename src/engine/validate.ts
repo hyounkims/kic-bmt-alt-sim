@@ -126,9 +126,6 @@ export function validateInput(input: SimInput): SimError[] {
 
   if (!isValidIsoDate(options.asOf)) errors.push(err('AS_OF', `기준일이 유효한 날짜(YYYY-MM-DD)가 아님: ${options.asOf}`, 'options.asOf'));
   if (options.displayStart < options.calcStart) errors.push(err('RANGE', 'displayStart는 calcStart 이상', 'options.displayStart'));
-  if (options.sensitivityMode === 'forward') {
-    errors.push(err('NOT_IMPLEMENTED', '실무 모드(7.7)는 M6에서 구현 예정', 'options.sensitivityMode'));
-  }
 
   const { mgmtInvest, mgmtPost, carry } = portfolio.fees;
   if (mgmtInvest < 0 || mgmtPost < 0) errors.push(err('RANGE', '관리보수율은 0 이상', 'portfolio.fees'));
