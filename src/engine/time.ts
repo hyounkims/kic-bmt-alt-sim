@@ -31,5 +31,30 @@ export function endOf(y: Year): YearTime {
   return (y + 1) as YearTime;
 }
 
-// TODO(M2): dateToYearTime(iso) — year + (dayOfYear − 1) / daysInYear
-//           예) 2026-09-30 → 2026 + 272/365 ≈ 2026.745
+const ISO_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
+const MS_PER_DAY = 86_400_000;
+
+/** YYYY-MM-DD 문자열이 실제 존재하는 날짜인지 (2026-02-30 등 거부). 시간대 영향 없도록 UTC로만 계산 */
+export function isValidIsoDate(iso: string): boolean {
+  const m = ISO_DATE.exec(iso);
+  if (!m) return false;
+  const [year, month, day] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const d = new Date(Date.UTC(year, month - 1, day));
+  return d.getUTCFullYear() === year && d.getUTCMonth() === month - 1 && d.getUTCDate() === day;
+}
+
+function daysInYear(year: number): number {
+  const leap = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+  return leap ? 366 : 365;
+}
+
+/**
+ * 날짜 → 연 소수 시각 (DESIGN.md 2장): year + (dayOfYear − 1) / daysInYear.
+ * 예) 2026-09-30 → 2026 + 272/365 ≈ 2026.745
+ */
+export function dateToYearTime(iso: string): YearTime {
+  if (!isValidIsoDate(iso)) throw new RangeError(`유효하지 않은 날짜: ${iso}`);
+  const year = Number(iso.slice(0, 4));
+  const elapsedDays = (Date.parse(`${iso}T00:00:00Z`) - Date.UTC(year, 0, 1)) / MS_PER_DAY;
+  return (year + elapsedDays / daysInYear(year)) as YearTime;
+}

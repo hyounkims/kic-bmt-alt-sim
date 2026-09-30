@@ -31,3 +31,27 @@ describe('연도·연 소수 시각 타입 (DESIGN.md 2장)', () => {
     expect([wrongTime, wrongYear, plain]).toHaveLength(3);
   });
 });
+
+describe('dateToYearTime (DESIGN.md 2장)', () => {
+  it('2026-09-30 → 2026 + 272/365 ≈ 2026.745', async () => {
+    const { dateToYearTime } = await import('../src/engine/time');
+    expect(dateToYearTime('2026-09-30')).toBeCloseTo(2026 + 272 / 365, 12);
+    expect(dateToYearTime('2026-01-01')).toBe(2026);
+    expect(dateToYearTime('2026-12-31')).toBeCloseTo(2026 + 364 / 365, 12);
+  });
+
+  it('윤년은 366일 기준', async () => {
+    const { dateToYearTime } = await import('../src/engine/time');
+    expect(dateToYearTime('2024-12-31')).toBeCloseTo(2024 + 365 / 366, 12);
+    expect(dateToYearTime('2024-03-01')).toBeCloseTo(2024 + 60 / 366, 12);
+  });
+
+  it('존재하지 않는 날짜·형식 오류는 거부', async () => {
+    const { dateToYearTime, isValidIsoDate } = await import('../src/engine/time');
+    for (const bad of ['2026-02-30', '2025-02-29', '2026-13-01', '2026-9-30', '20260930', '']) {
+      expect(isValidIsoDate(bad), bad).toBe(false);
+      expect(() => dateToYearTime(bad), bad).toThrow(RangeError);
+    }
+    expect(isValidIsoDate('2024-02-29')).toBe(true);
+  });
+});
