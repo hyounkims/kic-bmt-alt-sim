@@ -10,7 +10,7 @@ import {
   MOCK_FUND_COUNT,
   MOCK_TOTAL_COMMITMENT,
 } from './constants';
-import { adjustAssumptions } from './tranches';
+import { adjustAssumptions, type Assumptions } from './tranches';
 import { isValidIsoDate, type Year } from './time';
 import { ASSET_CLASSES, type AssetClass, type Fees, type Fund, type FundType, type Portfolio, type SimError, type SimInput } from './types';
 
@@ -107,6 +107,18 @@ export function checkMockIntegrity(portfolio: Portfolio): SimError[] {
 
 const pct = (v: number) => `${(v * 100).toFixed(2)}%`;
 
+/** 3.3-C 조정 후 하한 검사 (IRR′ ≥ 1%, MoIC′ > 1.0x). 단계 비활성화 판정에도 사용 */
+export function checkAdjustedBounds(fund: Fund, a: Assumptions, path = 'portfolio.funds'): SimError[] {
+  const errors: SimError[] = [];
+  if (!(a.irr >= ADJUSTED_IRR_MIN - BOUND_EPSILON)) {
+    errors.push(err('BOUND_IRR', `${fund.name}: 조정 후 IRR ${pct(a.irr)} < ${pct(ADJUSTED_IRR_MIN)}`, `${path}.gIRR`));
+  }
+  if (!(a.moic > ADJUSTED_MOIC_MIN_EXCLUSIVE + BOUND_EPSILON)) {
+    errors.push(err('BOUND_MOIC', `${fund.name}: 조정 후 MoIC ${a.moic.toFixed(2)}x ≤ ${ADJUSTED_MOIC_MIN_EXCLUSIVE.toFixed(1)}x`, `${path}.gMOIC`));
+  }
+  return errors;
+}
+
 /** 6장 범위·의미 검사. simulate가 계산 직전에 매번 호출한다 */
 export function validateInput(input: SimInput): SimError[] {
   const { portfolio, scenario, options } = input;
@@ -145,13 +157,7 @@ export function validateInput(input: SimInput): SimError[] {
     }
 
     // 3.3-C 조정 후 하한
-    const a = adjustAssumptions(f, scenario, options);
-    if (!(a.irr >= ADJUSTED_IRR_MIN - BOUND_EPSILON)) {
-      errors.push(err('BOUND_IRR', `${f.name}: 조정 후 IRR ${pct(a.irr)} < ${pct(ADJUSTED_IRR_MIN)}`, `${p}.gIRR`));
-    }
-    if (!(a.moic > ADJUSTED_MOIC_MIN_EXCLUSIVE + BOUND_EPSILON)) {
-      errors.push(err('BOUND_MOIC', `${f.name}: 조정 후 MoIC ${a.moic.toFixed(2)}x ≤ ${ADJUSTED_MOIC_MIN_EXCLUSIVE.toFixed(1)}x`, `${p}.gMOIC`));
-    }
+    errors.push(...checkAdjustedBounds(f, adjustAssumptions(f, scenario, options), p));
   });
 
   return errors;
