@@ -1,7 +1,7 @@
 // 민감도 컨트롤 (10.1, 3.3-7, 3.3-C): 자산군별 IRR·MoIC 단계 선택, 하한 위반 단계 비활성화, 해석 설정.
 
 import type { StepAvailability } from '../../engine/scenarios';
-import { ASSET_CLASSES, type AssetClass, type ByClass, type FundInfo, type IrrShiftMode, type MoicShiftMode, type NavBasis, type Scenario } from '../../engine/types';
+import { ASSET_CLASSES, type AssetClass, type ByClass, type FundInfo, type IrrShiftMode, type MoicShiftMode, type NavBasis, type Scenario, type SensitivityMode } from '../../engine/types';
 import { escapeHtml, multiple, pct } from '../format';
 import { CLASS_LABEL } from '../scope';
 
@@ -10,6 +10,7 @@ export interface Settings {
   moicShiftMode: MoicShiftMode;
   applyToDirect: boolean;
   navBasis: NavBasis;
+  sensitivityMode: SensitivityMode;
 }
 
 export type Availability = ByClass<{ readonly irr: readonly StepAvailability[]; readonly moic: readonly StepAvailability[] }>;
@@ -93,7 +94,7 @@ function renderSettings(s: Settings): string {
       <label class="control"><span>IRR 조정 해석 (3.3-1·3)</span>${sel('irrShiftMode', s.irrShiftMode, [['pp', '%p 가감 (18% → 15%)'], ['relative', '상대 변동 (18% → 17.46%)']])}</label>
       <label class="control"><span>MoIC 조정 해석 (3.3-2·3)</span>${sel('moicShiftMode', s.moicShiftMode, [['relative', '상대 변동 (2.0x → 1.6x)'], ['absolute', '절대 가감 (2.0x → 1.8x)']])}</label>
       <label class="control"><span>NAV 기준 (3.5)</span>${sel('navBasis', s.navBasis, [['gross', 'Gross (평가가치 합)'], ['net', 'Net (미실현 이익 × 20% 차감)']])}</label>
-      <label class="control"><span>민감도 모드 (3.3-6)</span><select disabled><option>전 구간 재계산</option><option>실무 모드 (M6 예정)</option></select></label>
+      <label class="control"><span>민감도 모드 (3.3-6)</span>${sel('sensitivityMode', s.sensitivityMode, [['full', '전 구간 재계산'], ['forward', '실무 모드 (기준일 이전 고정)']])}</label>
       <label class="check"><input type="checkbox" data-setting="applyToDirect"${s.applyToDirect ? ' checked' : ''} /> PE 조정을 XXX(직접투자)에도 적용 (3.3-4)</label>
     </div>
   </details>`;

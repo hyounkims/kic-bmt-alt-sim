@@ -21,8 +21,8 @@ export interface ViewState {
 }
 
 export function initialState(scope: Scope, asOf: string): ViewState {
-  const { irrShiftMode, moicShiftMode, applyToDirect, navBasis } = DEFAULT_OPTIONS;
-  return { scope, asOf, scenario: ZERO_SCENARIO, settings: { irrShiftMode, moicShiftMode, applyToDirect, navBasis } };
+  const { irrShiftMode, moicShiftMode, applyToDirect, navBasis, sensitivityMode } = DEFAULT_OPTIONS;
+  return { scope, asOf, scenario: ZERO_SCENARIO, settings: { irrShiftMode, moicShiftMode, applyToDirect, navBasis, sensitivityMode } };
 }
 
 /** 한 번의 렌더링에 필요한 엔진 결과 */
@@ -178,7 +178,7 @@ function renderTrancheTable(view: ScopedView, out: SimOutput, base: SimOutput | 
         <td class="tstar">${withBase(t.tStar, bt?.tStar, (v) => v.toFixed(2))}</td>
         <td class="exit-time">${withBase(t.exitTime, bt?.exitTime, yearTime)}</td><td>${withBase(t.exitYear, bt?.exitYear, String)}</td>
         <td>${money(t.exitGross)}</td><td>${money(t.carry)}</td><td>${money(t.exitNet)}</td>
-        <td>${done ? '회수 완료' : '보유'}</td>
+        <td>${done ? '회수 완료' : '보유'}${t.locked ? ' · 고정' : ''}</td>
       </tr>`;
     })
     .join('');
@@ -327,6 +327,7 @@ export function mountApp(root: HTMLElement, portfolio: Portfolio, initial: ViewS
       if (key === 'irrShiftMode' && (el.value === 'pp' || el.value === 'relative')) s.irrShiftMode = el.value;
       else if (key === 'moicShiftMode' && (el.value === 'relative' || el.value === 'absolute')) s.moicShiftMode = el.value;
       else if (key === 'navBasis' && (el.value === 'gross' || el.value === 'net')) s.navBasis = el.value;
+      else if (key === 'sensitivityMode' && (el.value === 'full' || el.value === 'forward')) s.sensitivityMode = el.value;
       else if (key === 'applyToDirect' && el instanceof HTMLInputElement) s.applyToDirect = el.checked;
       else return;
       const availability = availabilityOf(portfolio, optionsOf({ ...state, settings: s }));

@@ -190,4 +190,14 @@ describe('민감도 조정 (M4)', () => {
     const labels = [...root.querySelectorAll('.scenario-table tbody tr td:first-child')].map((td) => td.textContent);
     expect(labels).toEqual(['기본', 'IRR −3%', 'IRR +3%', 'MoIC −20%', 'MoIC +20%']);
   });
+
+  it('실무 모드 토글: PE IRR −3%p에서 AAA VII 2023 집행분 회수 시각 2027.27, 기준일 전 회수분은 고정', () => {
+    const s = root.querySelector<HTMLSelectElement>('select[data-setting="sensitivityMode"]');
+    if (!s) throw new Error('sensitivityMode 없음');
+    s.value = 'forward';
+    s.dispatchEvent(new Event('change', { bubbles: true }));
+    click(root, shiftBtn('PE', 'irr', -0.03));
+    expect(cellText(root, 'AAA_VII:2023', 'exit-time')).toBe('2027.27 (2027.19)');
+    expect(root.querySelector('tr[data-tranche="AAA_VII:2020"] td:last-child')?.textContent).toBe('회수 완료 · 고정');
+  });
 });
