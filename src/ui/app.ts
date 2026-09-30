@@ -2,7 +2,7 @@
 // 계산은 엔진이 하고, 여기서는 출력 객체를 고르고 서식화만 한다.
 
 import { byClassOf, DEFAULT_OPTIONS, ZERO_SCENARIO } from '../engine/constants';
-import { presetScenario, runScenarios, SCENARIO_PRESETS, stepAvailability, type ScenarioRuns } from '../engine/scenarios';
+import { presetScenario, runScenarios, SCENARIO_PRESETS, stepAvailability, summarizeScenarios, type ScenarioRuns } from '../engine/scenarios';
 import { simulate } from '../engine/simulate';
 import { isValidIsoDate } from '../engine/time';
 import { ASSET_CLASSES, type AssetClass, type KpiPoint, type Options, type Portfolio, type Scenario, type SimError, type SimInput, type SimOutput, type Tranche } from '../engine/types';
@@ -12,18 +12,29 @@ import { escapeHtml, money, multiple, pct, PHASE_LABEL, yearTime } from './forma
 import { renderPrintView } from './print/printView';
 import { CLASS_LABEL, parseScopeKey, scopeKey, selectScope, type Scope, type ScopedView } from './scope';
 
+/** 결과 표 탭 (10.1 v0.8) */
+export type TabKey = 'scenarios' | 'years' | 'tranches' | 'assumptions';
+const TABS: readonly [TabKey, string][] = [
+  ['scenarios', '시나리오 비교'],
+  ['years', '연도별 현금흐름'],
+  ['tranches', '집행분 상세'],
+  ['assumptions', '가정 명세'],
+];
+
 export interface ViewState {
   scope: Scope;
   asOf: string;
   scenario: Scenario;
   settings: Settings;
+  /** 활성 탭: 재계산 후에도 유지 */
+  tab: TabKey;
   /** 해석 변경으로 단계가 초기화된 경우 알림 (10.1 v0.4) */
   notice?: string;
 }
 
 export function initialState(scope: Scope, asOf: string): ViewState {
   const { irrShiftMode, moicShiftMode, applyToDirect, navBasis, sensitivityMode } = DEFAULT_OPTIONS;
-  return { scope, asOf, scenario: ZERO_SCENARIO, settings: { irrShiftMode, moicShiftMode, applyToDirect, navBasis, sensitivityMode } };
+  return { scope, asOf, scenario: ZERO_SCENARIO, settings: { irrShiftMode, moicShiftMode, applyToDirect, navBasis, sensitivityMode }, tab: 'scenarios' };
 }
 
 /** 한 번의 렌더링에 필요한 엔진 결과 */
@@ -97,7 +108,9 @@ function renderControls(out: SimOutput, state: ViewState): string {
   const fundOpts = ASSET_CLASSES.map(
     (c) => `<optgroup label="펀드 · ${c}">${out.funds.filter((f) => f.assetClass === c).map((f) => opt({ kind: 'fund', id: f.id }, `${f.name}${f.type === 'direct' ? ' (직접투자)' : ''}`)).join('')}</optgroup>`,
   ).join('');
-  return `<div class="controls">
+  return `<section class="side-section controls" aria-label="보기">
+    <div class="eyebrow">View</div>
+    <h2>보기</h2>
     <label class="control">
       <span>보기 범위</span>
       <select id="scope-select">${opt({ kind: 'total' }, '대체 포트폴리오 전체')}<optgroup label="자산군">${classOpts}</optgroup>${fundOpts}</select>
@@ -106,12 +119,13 @@ function renderControls(out: SimOutput, state: ViewState): string {
       <span>기준일</span>
       <input id="asof-input" type="date" value="${escapeHtml(state.asOf)}" required />
     </label>
-    <p class="control-note">기준일 이전 = 실현(채움·실선), 이후 = 추정(빗금·점선). 인쇄본 기준일은 2026-09-30 고정.</p>
-  </div>`;
+    <p class="control-note">기준일 이전 실현(채움·실선), 이후 추정(빗금·점선)</p>
+  </section>`;
 }
 
 const signedMoney = (v: number) => `${v >= 0 ? '+' : '−'}${money(Math.abs(v))}`;
 const signedMultiple = (v: number) => `${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(2)}x`;
+const signedYears = (v: number) => `${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(2)}`;
 
 function renderKpi(view: ScopedView, out: SimOutput, baseKpi: KpiPoint | null, navLabel: string): string {
   const k = view.kpi;
@@ -120,13 +134,21 @@ function renderKpi(view: ScopedView, out: SimOutput, baseKpi: KpiPoint | null, n
   const card = (label: string, value: string, note: string, d: string) =>
     `<div class="kpi-card"><div class="kpi-label">${label}</div><div class="kpi-value">${value}</div>${d}<div class="kpi-note">${note}</div></div>`;
   const b = baseKpi ?? undefined;
-  return `<section class="kpi-row" aria-label="기준일 KPI">
-    ${card('누적 Capital Call', money(k.cumCall), '$mn · 투자 + 관리보수', delta(k.cumCall, b?.cumCall, money, signedMoney))}
-    ${card('누적 Distribution', money(k.cumDist), '$mn · 순회수 (성과보수 차감)', delta(k.cumDist, b?.cumDist, money, signedMoney))}
-    ${card('기준일 NAV', money(k.nav), `$mn · 기준일 평가가치 (${navLabel}), 연말 NAV와 다름`, delta(k.nav, b?.nav, money, signedMoney))}
-    ${card('DPI', multiple(k.dpi), 'Distribution ÷ Call', delta(k.dpi, b?.dpi, multiple, signedMultiple))}
-    ${card('TVPI', multiple(k.tvpi), '(Distribution + NAV) ÷ Call', delta(k.tvpi, b?.tvpi, multiple, signedMultiple))}
-    <p class="kpi-caption">기준일 ${escapeHtml(out.meta.asOf)} (연 소수 시각 ${yearTime(out.meta.asOfTime)}) 시점 · 진행 연도 ${out.meta.asOfYear}${baseKpi ? ' · 회색 글씨는 기본 가정 대비' : ''}</p>
+  // 대표 수치 (10.1 v0.8): 기준일 NAV를 크게, 나머지는 작게
+  return `<section class="hero" aria-label="기준일 KPI">
+    <div class="kpi-card kpi-hero">
+      <div class="kpi-label">기준일 NAV</div>
+      <div class="hero-figure"><span class="kpi-value">${money(k.nav)}</span><span class="hero-unit">$mn</span></div>
+      ${delta(k.nav, b?.nav, money, signedMoney)}
+      <div class="kpi-note">기준일 평가가치 (${navLabel}) · 연말 NAV와 다름</div>
+    </div>
+    <div class="kpi-stats">
+      ${card('누적 Capital Call', money(k.cumCall), '$mn · 투자 + 관리보수', delta(k.cumCall, b?.cumCall, money, signedMoney))}
+      ${card('누적 Distribution', money(k.cumDist), '$mn · 순회수', delta(k.cumDist, b?.cumDist, money, signedMoney))}
+      ${card('DPI', multiple(k.dpi), 'Distribution ÷ Call', delta(k.dpi, b?.dpi, multiple, signedMultiple))}
+      ${card('TVPI', multiple(k.tvpi), '(Dist + NAV) ÷ Call', delta(k.tvpi, b?.tvpi, multiple, signedMultiple))}
+    </div>
+    <p class="kpi-caption">기준일 ${escapeHtml(out.meta.asOf)} (연 소수 시각 ${yearTime(out.meta.asOfTime)}) · 진행 연도 ${out.meta.asOfYear}${baseKpi ? ' · 회색 글씨는 기본 가정 대비' : ''}</p>
   </section>`;
 }
 
@@ -153,8 +175,8 @@ function renderYearTable(view: ScopedView, out: SimOutput): string {
     )
     .join('');
   const note = view.startYear > out.meta.calcStart ? `<p class="table-note">누적값은 ${out.meta.calcStart}년(최초 약정)부터 누적 (3.1-6).</p>` : '';
-  return `<section class="panel">
-    <h2>연도별 현금흐름 <span class="muted">($mn)</span></h2>
+  return `<section class="tab-content">
+    <p class="table-note">단위 $mn</p>
     ${note}
     <div class="table-wrap"><table class="data-table year-table">
       <thead><tr><th>연도</th><th>구분</th><th>투자 Call</th><th>관리보수</th><th>Distribution</th><th>연말 NAV</th><th>누적 Call</th><th>누적 Distribution</th></tr></thead>
@@ -185,8 +207,8 @@ function renderTrancheTable(view: ScopedView, out: SimOutput, base: SimOutput | 
       </tr>`;
     })
     .join('');
-  return `<section class="panel">
-    <h2>집행분 상세 <span class="muted">($mn${base ? ' · 괄호는 기본 가정' : ''})</span></h2>
+  return `<section class="tab-content">
+    <p class="table-note">단위 $mn${base ? ' · 괄호는 기본 가정' : ''}</p>
     <div class="table-wrap"><table class="data-table tranche-table">
       <thead><tr><th>펀드</th><th>투자 연도</th><th>집행액</th><th>IRR</th><th>MoIC</th><th>t* (년)</th><th>회수 시각</th><th>회수 연도</th><th>회수 총액</th><th>성과보수</th><th>순회수</th><th>기준일 상태</th></tr></thead>
       <tbody>${rows}</tbody>
@@ -199,24 +221,25 @@ function renderScenarioTable(c: Computed, state: ViewState): string {
   // 라벨은 현재 해석 설정 기준 (예: IRR 상대 변동이면 "IRR −3%")
   const label = (irr: number, moic: number) =>
     irr === 0 && moic === 0 ? '기본' : irr !== 0 ? `IRR ${stepLabel('irr', irr, state.settings)}` : `MoIC ${stepLabel('moic', moic, state.settings)}`;
-  const rows = c.scenarios.runs
-    .map(({ preset, output }) => {
-      const v = output.errors.length === 0 ? selectScope(output, state.scope) : null;
-      const last = v?.series.filter((p) => p.year <= v.endYear).at(-1);
+  const rows = summarizeScenarios(c.scenarios, state.scope)
+    .map((r) => {
+      const { preset } = r;
       const applied = ASSET_CLASSES.every((cl) => sameShift(state.scenario.irrShift[cl], preset.irrShift) && sameShift(state.scenario.moicShift[cl], preset.moicShift));
-      const cells = v && last
-        ? `<td>${v.endYear}</td><td>${yearTime(v.lastExitTime)}</td><td>${money(last.cumCall)}</td><td>${money(last.cumDist)}</td><td>${multiple(v.kpi.tvpi)}</td>`
-        : `<td colspan="5" class="muted">${escapeHtml(output.errors.map((e) => e.message).join(', ') || '범위 없음')}</td>`;
-      return `<tr class="${applied ? 'applied' : ''}">
+      const cells = r.errors.length === 0
+        ? `<td>${r.endYear}</td><td>${yearTime(r.lastExitTime)}</td><td>${money(r.finalCumCall)}</td><td>${money(r.finalCumDist)}</td>
+           <td class="delta">${r.vsBase ? signedYears(r.vsBase.lastExitTime) : '—'}</td><td class="delta">${r.vsBase ? signedMoney(r.vsBase.finalCumDist) : '—'}</td>
+           <td>${multiple(r.tvpi)}</td>`
+        : `<td colspan="7" class="muted">${escapeHtml(r.errors.join(', '))}</td>`;
+      return `<tr class="${applied ? 'applied' : ''}${preset.key === 'base' ? ' is-base' : ''}">
         <td>${escapeHtml(label(preset.irrShift, preset.moicShift))}</td>${cells}
         <td><button type="button" class="text-btn" data-preset="${preset.key}"${applied ? ' disabled' : ''}>${applied ? '적용 중' : '전 자산군 적용'}</button></td>
       </tr>`;
     })
     .join('');
-  return `<section class="panel">
-    <h2>5개 시나리오 비교 <span class="muted">전 자산군 동시 적용 (8장, 3.3-A) · 해석 설정이 기본이면 인쇄본과 같은 수치 · 최대 종료 연도 ${c.scenarios.maxEndYear}</span></h2>
+  return `<section class="tab-content">
+    <p class="table-note">전 자산군 동시 적용 (8장, 3.3-A) · 해석 설정이 기본이면 인쇄본과 같은 수치 · 최대 종료 연도 ${c.scenarios.maxEndYear} · 단위 $mn</p>
     <div class="table-wrap"><table class="data-table scenario-table">
-      <thead><tr><th>시나리오</th><th>종료 연도</th><th>마지막 회수 시각</th><th>최종 누적 Call</th><th>최종 누적 Distribution</th><th>기준일 TVPI</th><th></th></tr></thead>
+      <thead><tr><th>시나리오</th><th>종료 연도</th><th>마지막 회수 시각</th><th>최종 누적 Call</th><th>최종 누적 Distribution</th><th>Δ 마지막 회수 (년)</th><th>Δ Distribution</th><th>기준일 TVPI</th><th></th></tr></thead>
       <tbody>${rows}</tbody>
     </table></div>
   </section>`;
@@ -241,10 +264,10 @@ function renderAssumptions(): string {
     ['민감도 해석', '기본(전 구간 재계산)은 모든 집행분을 조정 IRR·MoIC로 투자 시점부터 다시 계산한 가상 시나리오. 실현/추정은 기준일 기준 표시 구분. 실무 모드는 기준일 이전을 기본 가정 결과로 고정하고 이후만 재계산 (3.3-6)'],
     ['시나리오 비교', '인쇄용 5개 시나리오는 전 자산군 동시 적용, 전 구간 재계산 (8장, 3.3-A)'],
   ];
-  return `<details class="panel assumptions" data-panel="assumptions">
-    <summary><h2>가정 명세</h2><span class="muted">원문 가정과 해석 결정</span></summary>
+  return `<section class="tab-content assumptions">
+    <p class="table-note">원문 가정과 해석 결정</p>
     <dl>${items.map(([k, v]) => `<dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd>`).join('')}</dl>
-  </details>`;
+  </section>`;
 }
 
 /** 화면 사용 가이드 (10.1 v0.7): 조작법·인쇄 설정 요약. 상세는 사용자 가이드 문서 */
@@ -259,7 +282,7 @@ function renderGuide(): string {
     ['차트 툴팁', '연도 위에 마우스를 올리면 그해 NAV·누적값·당해 흐름 표시'],
     ['인쇄 / PDF', '오른쪽 위 버튼. 기준일 2026-09-30 고정 2페이지. 프린터·Microsoft Print to PDF는 레이아웃 "가로", 용지 "A4" 선택'],
   ];
-  return `<details class="panel guide" data-panel="guide">
+  return `<details class="guide" data-panel="guide" id="guide">
     <summary><h2>사용 가이드</h2><span class="muted">조작법과 인쇄 설정</span></summary>
     <dl>${items.map(([k, v]) => `<dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd>`).join('')}</dl>
   </details>`;
@@ -274,20 +297,33 @@ export function renderDashboard(c: Computed, state: ViewState): string {
   const baseView = base && base.errors.length === 0 ? selectScope(base, state.scope) : null;
   const xEndYear = Math.max(view.endYear, baseView?.endYear ?? 0);
   const chartOpts = baseView ? { idPrefix: 'main', xEndYear, baseline: baseView.steps } : { idPrefix: 'main', xEndYear };
-  return `
-    ${renderGuide()}
-    ${renderControls(out, state)}
-    ${sensitivity}
-    ${renderKpi(view, out, baseView?.kpi ?? null, state.settings.navBasis === 'gross' ? 'Gross' : 'Net')}
-    <section class="panel chart-panel">
-      <h2>${escapeHtml(view.title)} <span class="muted">${view.startYear}~${xEndYear} · NAV / 누적 Capital Call / 누적 Distribution${baseView ? ' · 회색 = 기본 가정' : ''}</span></h2>
-      ${renderLegend(baseView !== null)}
-      <div class="chart-wrap">${renderMainChart(view, out.meta, chartOpts)}<div class="chart-tooltip" hidden></div></div>
-    </section>
-    ${renderScenarioTable(c, state)}
-    ${renderYearTable(view, out)}
-    ${renderTrancheTable(view, out, base)}
-    ${renderAssumptions()}`;
+  const tabBody: Record<TabKey, string> = {
+    scenarios: renderScenarioTable(c, state),
+    years: renderYearTable(view, out),
+    tranches: renderTrancheTable(view, out, base),
+    assumptions: renderAssumptions(),
+  };
+  // 2단 배치 (10.1 v0.8): 왼쪽 조작 사이드바, 오른쪽 결과
+  return `<div class="layout">
+    <aside class="sidebar">
+      ${renderControls(out, state)}
+      ${sensitivity}
+    </aside>
+    <main class="main">
+      ${renderGuide()}
+      ${renderKpi(view, out, baseView?.kpi ?? null, state.settings.navBasis === 'gross' ? 'Gross' : 'Net')}
+      <section class="chart-panel">
+        <div class="eyebrow">Cash Flow &amp; NAV</div>
+        <h2>${escapeHtml(view.title)} <span class="muted">${view.startYear}~${xEndYear} · 연말 NAV / 누적 Capital Call / 누적 Distribution${baseView ? ' · 회색 = 기본 가정' : ''}</span></h2>
+        ${renderLegend(baseView !== null)}
+        <div class="chart-wrap">${renderMainChart(view, out.meta, chartOpts)}<div class="chart-tooltip" hidden></div></div>
+      </section>
+      <section class="results">
+        <div class="tabs" role="tablist">${TABS.map(([k, label]) => `<button type="button" role="tab" class="tab${state.tab === k ? ' active' : ''}" data-tab="${k}" aria-selected="${state.tab === k}">${label}</button>`).join('')}</div>
+        ${TABS.map(([k]) => `<div class="tab-panel" role="tabpanel" data-tab-panel="${k}"${state.tab === k ? '' : ' hidden'}>${tabBody[k]}</div>`).join('')}
+      </section>
+    </main>
+  </div>`;
 }
 
 /** 대시보드 마운트: 입력이 바뀔 때마다 엔진을 다시 실행해 전체를 그린다 (엔진 계산은 수 ms) */
@@ -295,12 +331,22 @@ export function mountApp(root: HTMLElement, portfolio: Portfolio, initial: ViewS
   let state: ViewState = { ...initial };
   const header = document.createElement('header');
   header.className = 'app-header';
-  header.innerHTML = `<div>
+  header.innerHTML = `<div class="header-text">
+      <div class="eyebrow">Alternative Investment · Cash Flow Simulation</div>
       <h1>대체투자 현금흐름 시뮬레이션</h1>
       <p>KIC 대체자산 포트폴리오 12개 펀드 · 약정 $3,000mn · 2017년부터 완전 회수까지 NAV, 누적 Capital Call·Distribution</p>
     </div>
-    <button type="button" id="print-btn" class="text-btn print-btn" title="A4 가로 2페이지 · 기준일 2026-09-30 고정 · 실무 모드">인쇄 / PDF 저장</button>`;
+    <div class="header-actions">
+      <button type="button" id="guide-btn" class="pill">사용 가이드</button>
+      <button type="button" id="print-btn" class="pill pill-dark" title="A4 가로 2페이지 · 기준일 2026-09-30 고정">인쇄 / PDF 저장 ▶</button>
+    </div>`;
   header.querySelector('#print-btn')?.addEventListener('click', () => window.print());
+  header.querySelector('#guide-btn')?.addEventListener('click', () => {
+    const g = body.querySelector<HTMLDetailsElement>('#guide');
+    if (!g) return;
+    g.open = !g.open;
+    if (g.open) g.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
   const body = document.createElement('div');
   body.className = 'screen-root';
   // 인쇄 뷰는 화면 상태와 독립이므로 한 번만 만든다 (10.2 v0.5)
@@ -336,6 +382,10 @@ export function mountApp(root: HTMLElement, portfolio: Portfolio, initial: ViewS
       const p = SCENARIO_PRESETS.find((x) => x.key === preset);
       if (!p) return;
       state = { ...state, notice: undefined, scenario: presetScenario(p) };
+    } else if (btn.dataset.tab) {
+      const t = TABS.find(([k]) => k === btn.dataset.tab)?.[0];
+      if (!t) return;
+      state = { ...state, tab: t };
     } else if (btn.id === 'reset-shifts') {
       state = { ...state, notice: undefined, scenario: { irrShift: byClassOf(0), moicShift: byClassOf(0) } };
     } else {

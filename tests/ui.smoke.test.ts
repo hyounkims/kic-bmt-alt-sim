@@ -1,7 +1,8 @@
 // @vitest-environment happy-dom
 import { beforeEach, describe, expect, it } from 'vitest';
 import { compute, initialState, mountApp, renderDashboard } from '../src/ui/app';
-import { mockPortfolio } from './fixtures';
+import { baseInput, mockPortfolio } from './fixtures';
+import { runScenarios, summarizeScenarios } from '../src/engine/scenarios';
 
 // M3 화면 구조 스모크 테스트 (실제 simulate 출력으로 렌더링)
 function mount(asOf = '2026-09-30') {
@@ -80,7 +81,8 @@ describe('기본 대시보드 (전체, 기준일 2026-09-30)', () => {
     expect(years[years.length - 1]).toBe('2027');
     expect(root.querySelectorAll('.hit')).toHaveLength(8);
     expect(root.querySelectorAll('.tranche-table tbody tr')).toHaveLength(4);
-    expect(root.querySelector('.kpi-card .kpi-value')?.textContent).toBe('333.0'); // 투자 300 + 보수 2020~23 연 6(24) + 2024~26 연 3(9)
+    const callCard = [...root.querySelectorAll('.kpi-card')].find((c) => c.querySelector('.kpi-label')?.textContent === '누적 Capital Call');
+    expect(callCard?.querySelector('.kpi-value')?.textContent).toBe('333.0'); // 투자 300 + 보수 2020~23 연 6(24) + 2024~26 연 3(9)
   });
 
   it('보기 범위 전환: 자산군 PD', () => {
@@ -207,5 +209,29 @@ describe('민감도 조정 (M4)', () => {
     click(root, shiftBtn('PE', 'irr', -0.03));
     expect(cellText(root, 'AAA_VII:2023', 'exit-time')).toBe('2027.27 (2027.19)');
     expect(root.querySelector('tr[data-tranche="AAA_VII:2020"] td:last-child')?.textContent).toBe('회수 완료 · 고정');
+  });
+
+  it('M8: 2단 배치·대표 수치·탭 전환, 재계산 후 활성 탭 유지', () => {
+    expect(root.querySelector('.layout .sidebar .sens-panel')).not.toBeNull();
+    expect(root.querySelector('.layout .main .hero .kpi-hero .kpi-label')?.textContent).toBe('기준일 NAV');
+    const panel = (k: string) => root.querySelector<HTMLElement>(`[data-tab-panel="${k}"]`);
+    expect(panel('scenarios')?.hidden).toBe(false);
+    expect(panel('tranches')?.hidden).toBe(true);
+    click(root, 'button[data-tab="tranches"]');
+    expect(panel('tranches')?.hidden).toBe(false);
+    expect(panel('scenarios')?.hidden).toBe(true);
+    // 민감도를 바꿔 다시 그려도 탭 유지
+    click(root, shiftBtn('PE', 'irr', -0.03));
+    expect(panel('tranches')?.hidden).toBe(false);
+    expect(root.querySelector('button[data-tab="tranches"]')?.classList.contains('active')).toBe(true);
+  });
+
+  it('M8: 시나리오 탭에 기본 대비 차이 (전체 IRR −3%p 마지막 회수 +0.78년)', () => {
+    const row = [...root.querySelectorAll('.scenario-table tbody tr')][1];
+    const deltas = [...(row?.querySelectorAll('td.delta') ?? [])].map((td) => td.textContent);
+    // 값 자체(0.785 ≈ 12장 4.97 − 4.19)는 scenarios.test.ts에서 검증. 여기서는 화면 표시 = 엔진 결과 서식화
+    const engine = summarizeScenarios(runScenarios(baseInput()), { kind: 'total' })[1]?.vsBase?.lastExitTime ?? Number.NaN;
+    expect(deltas[0]).toBe(`+${engine.toFixed(2)}`);
+    expect([...root.querySelectorAll('.scenario-table tbody tr')][0]?.querySelector('td.delta')?.textContent).toBe('—');
   });
 });

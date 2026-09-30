@@ -73,9 +73,10 @@ export function renderSensitivity(scenario: Scenario, settings: Settings, availa
   );
   const active = ASSET_CLASSES.some((c) => scenario.irrShift[c] !== 0 || scenario.moicShift[c] !== 0);
 
-  return `<section class="panel sens-panel" aria-label="민감도 조정">
+  return `<section class="side-section sens-panel" aria-label="민감도 조정">
+    <div class="eyebrow">Sensitivity</div>
     <div class="sens-head">
-      <h2>민감도 조정 <span class="muted">자산군별 IRR ${settings.irrShiftMode === 'pp' ? '3%p' : '3%'} · MoIC ${settings.moicShiftMode === 'relative' ? '20%' : '0.20x'} 단위 (3.3)</span></h2>
+      <h2>민감도 조정 <span class="muted">IRR ${settings.irrShiftMode === 'pp' ? '3%p' : '3%'} · MoIC ${settings.moicShiftMode === 'relative' ? '20%' : '0.20x'} 단위 (3.3)</span></h2>
       <button type="button" id="reset-shifts" class="text-btn"${active ? '' : ' disabled'}>기본 가정으로 초기화</button>
     </div>
     ${notice ? `<p class="notice" role="status">${escapeHtml(notice)}</p>` : ''}
