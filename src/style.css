@@ -78,9 +78,25 @@ h2 { font-size: 16px; margin: 0 0 10px; font-weight: 700; letter-spacing: -0.01e
   padding-right: 6px; scrollbar-width: thin;
 }
 .main { min-width: 0; }
+/* 반응형: 900~1199px는 좁은 사이드바로 2단 유지, 900px 미만은 한 열 */
 @media (max-width: 1199px) {
+  .layout { grid-template-columns: 290px minmax(0, 1fr); gap: 20px; }
+}
+@media (max-width: 899px) {
   .layout { grid-template-columns: minmax(0, 1fr); }
   .sidebar { position: static; max-height: none; overflow: visible; padding-right: 0; }
+}
+@media (min-width: 600px) and (max-width: 899px) {
+  .sens-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 20px; }
+  .sens-row:nth-last-child(2) { border-bottom: 0; }
+}
+@media (max-width: 700px) {
+  #app { padding: 0 16px 40px; }
+  .app-header { flex-direction: column; align-items: flex-start; }
+  .app-header::before { inset: 0 -16px; }
+  .app-header .eyebrow { font-size: 15px; }
+  .app-header h1 { font-size: 22px; }
+  .header-actions { flex-wrap: wrap; }
 }
 
 .side-section { padding: 0 0 16px; margin-bottom: 16px; border-bottom: 1px solid var(--rule-soft); }
@@ -159,9 +175,13 @@ h2 { font-size: 16px; margin: 0 0 10px; font-weight: 700; letter-spacing: -0.01e
 .kpi-caption { grid-column: 1 / -1; margin: 4px 0 0; font-size: 11px; color: var(--text-muted); }
 .kpi-delta { font-family: var(--font-num); font-size: 12px; color: var(--text-muted); font-variant-numeric: tabular-nums; margin-top: 2px; }
 .kpi-delta strong { color: var(--kic-navy); font-weight: 700; }
-@media (max-width: 900px) {
+@media (max-width: 1199px) {
   .hero { grid-template-columns: 1fr; }
+  .kpi-stats .kpi-card:first-child { border-left: 0; padding-left: 0; }
+}
+@media (max-width: 700px) {
   .kpi-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 10px; }
+  .kpi-stats .kpi-card:nth-child(3) { border-left: 0; padding-left: 0; }
   .kpi-hero .kpi-value { font-size: 48px; }
 }
 
