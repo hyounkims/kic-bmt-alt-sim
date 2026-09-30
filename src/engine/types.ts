@@ -166,6 +166,9 @@ export interface KpiPoint {
   readonly tvpi: number;
 }
 
+/** 보기 범위 (10.1): 전체 / 자산군 / 펀드 */
+export type ScopeRef = { readonly kind: 'total' } | { readonly kind: 'class'; readonly id: AssetClass } | { readonly kind: 'fund'; readonly id: string };
+
 /** 보기 범위별 묶음: 전체 / 자산군별 / 펀드별 */
 export interface Scoped<T> {
   readonly total: T;

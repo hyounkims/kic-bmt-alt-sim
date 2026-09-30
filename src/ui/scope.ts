@@ -1,8 +1,9 @@
 // 보기 범위 (10.1): 전체 / 자산군 / 펀드. 출력 객체에서 해당 범위 데이터를 고른다 (계산 없음).
 
-import type { AssetClass, FundInfo, KpiPoint, SeriesPoint, SimOutput, StepPoint, Tranche } from '../engine/types';
+import type { AssetClass, FundInfo, KpiPoint, ScopeRef, SeriesPoint, SimOutput, StepPoint, Tranche } from '../engine/types';
 
-export type Scope = { kind: 'total' } | { kind: 'class'; id: AssetClass } | { kind: 'fund'; id: string };
+/** 엔진의 보기 범위 타입과 같음 (8장 summarizeScenarios와 공유) */
+export type Scope = ScopeRef;
 
 export const CLASS_LABEL: Record<AssetClass, string> = {
   PE: '사모주식 PE',
