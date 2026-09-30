@@ -193,6 +193,9 @@ function renderTrancheTable(view: ScopedView, out: SimOutput, base: SimOutput | 
 
 /** 8장 5개 시나리오 요약 (전 자산군 동시 적용, 3.3-A). 현재 보기 범위 기준 */
 function renderScenarioTable(c: Computed, state: ViewState): string {
+  // 라벨은 현재 해석 설정 기준 (예: IRR 상대 변동이면 "IRR −3%")
+  const label = (irr: number, moic: number) =>
+    irr === 0 && moic === 0 ? '기본' : irr !== 0 ? `IRR ${stepLabel('irr', irr, state.settings)}` : `MoIC ${stepLabel('moic', moic, state.settings)}`;
   const rows = c.scenarios.runs
     .map(({ preset, output }) => {
       const v = output.errors.length === 0 ? selectScope(output, state.scope) : null;
@@ -202,7 +205,7 @@ function renderScenarioTable(c: Computed, state: ViewState): string {
         ? `<td>${v.endYear}</td><td>${money(last.cumCall)}</td><td>${money(last.cumDist)}</td><td>${multiple(v.kpi.tvpi)}</td>`
         : `<td colspan="4" class="muted">${escapeHtml(output.errors.map((e) => e.message).join(', ') || '범위 없음')}</td>`;
       return `<tr class="${applied ? 'applied' : ''}">
-        <td>${escapeHtml(preset.label)}</td>${cells}
+        <td>${escapeHtml(label(preset.irrShift, preset.moicShift))}</td>${cells}
         <td><button type="button" class="text-btn" data-preset="${preset.key}"${applied ? ' disabled' : ''}>${applied ? '적용 중' : '전 자산군 적용'}</button></td>
       </tr>`;
     })
@@ -234,7 +237,7 @@ function renderAssumptions(): string {
     ['조정 하한', 'IRR′ ≥ 1%, MoIC′ > 1.0x. 위반 단계는 비활성화 — 손실 케이스의 성과보수 규칙이 원문에 없음 (3.3-C)'],
     ['시나리오 비교', '인쇄용 5개 시나리오는 전 자산군 동시 적용 (8장, 3.3-A)'],
   ];
-  return `<details class="panel assumptions">
+  return `<details class="panel assumptions" data-panel="assumptions">
     <summary><h2>가정 명세</h2><span class="muted">원문 가정과 해석 결정 (DESIGN.md 3장)</span></summary>
     <dl>${items.map(([k, v]) => `<dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd>`).join('')}</dl>
   </details>`;
@@ -276,7 +279,10 @@ export function mountApp(root: HTMLElement, portfolio: Portfolio, initial: ViewS
 
   const render = () => {
     const c = compute(portfolio, state);
+    // 다시 그려도 펼친 패널(해석 설정 등)은 유지
+    const open = new Set([...body.querySelectorAll<HTMLDetailsElement>('details[data-panel]')].filter((d) => d.open).map((d) => d.dataset.panel));
     body.innerHTML = renderDashboard(c, state);
+    for (const d of body.querySelectorAll<HTMLDetailsElement>('details[data-panel]')) if (open.has(d.dataset.panel)) d.open = true;
     const view = c.out.errors.length === 0 ? selectScope(c.out, state.scope) : null;
     const baseView = c.base && c.base.errors.length === 0 ? selectScope(c.base, state.scope) : null;
     const chart = body.querySelector<HTMLElement>('.chart-wrap');

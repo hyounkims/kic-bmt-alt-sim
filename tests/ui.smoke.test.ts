@@ -177,4 +177,17 @@ describe('민감도 조정 (M4)', () => {
     expect(root.querySelector(shiftBtn('RE', 'moic', 0))?.classList.contains('selected')).toBe(true);
     expect(root.querySelector('.notice')?.textContent).toContain('RE MoIC −40%');
   });
+
+  it('다시 그려도 펼친 해석 설정 패널 유지, 시나리오 라벨은 해석 설정을 따름', () => {
+    const settings = root.querySelector<HTMLDetailsElement>('details[data-panel="settings"]');
+    if (!settings) throw new Error('settings 없음');
+    settings.open = true;
+    const s = root.querySelector<HTMLSelectElement>('select[data-setting="irrShiftMode"]');
+    if (!s) throw new Error('irrShiftMode 없음');
+    s.value = 'relative';
+    s.dispatchEvent(new Event('change', { bubbles: true }));
+    expect(root.querySelector<HTMLDetailsElement>('details[data-panel="settings"]')?.open).toBe(true);
+    const labels = [...root.querySelectorAll('.scenario-table tbody tr td:first-child')].map((td) => td.textContent);
+    expect(labels).toEqual(['기본', 'IRR −3%', 'IRR +3%', 'MoIC −20%', 'MoIC +20%']);
+  });
 });

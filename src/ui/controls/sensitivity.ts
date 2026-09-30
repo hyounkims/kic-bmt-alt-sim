@@ -79,7 +79,7 @@ export function renderSensitivity(scenario: Scenario, settings: Settings, availa
     </div>
     ${notice ? `<p class="notice" role="status">${escapeHtml(notice)}</p>` : ''}
     <div class="sens-grid">${rows}</div>
-    ${blocked.length ? `<details class="blocked"><summary>비활성 단계 ${blocked.length}개 (조정 하한 3.3-C: IRR′ ≥ 1%, MoIC′ > 1.0x)</summary><ul>${blocked.join('')}</ul></details>` : ''}
+    ${blocked.length ? `<details class="blocked" data-panel="blocked"><summary>비활성 단계 ${blocked.length}개 (조정 하한 3.3-C: IRR′ ≥ 1%, MoIC′ > 1.0x)</summary><ul>${blocked.join('')}</ul></details>` : ''}
     ${renderSettings(settings)}
   </section>`;
 }
@@ -87,7 +87,7 @@ export function renderSensitivity(scenario: Scenario, settings: Settings, availa
 function renderSettings(s: Settings): string {
   const sel = (id: string, value: string, options: [string, string][]) =>
     `<select data-setting="${id}">${options.map(([v, l]) => `<option value="${v}"${v === value ? ' selected' : ''}>${escapeHtml(l)}</option>`).join('')}</select>`;
-  return `<details class="settings">
+  return `<details class="settings" data-panel="settings">
     <summary>해석 설정</summary>
     <div class="settings-grid">
       <label class="control"><span>IRR 조정 해석 (3.3-1·3)</span>${sel('irrShiftMode', s.irrShiftMode, [['pp', '%p 가감 (18% → 15%)'], ['relative', '상대 변동 (18% → 17.46%)']])}</label>
