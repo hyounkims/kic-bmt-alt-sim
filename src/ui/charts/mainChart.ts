@@ -150,14 +150,6 @@ export function renderMainChart(view: ScopedView, meta: Meta, opts: ChartOptions
   }
   parts.push(`<line class="baseline" x1="${M.left}" x2="${M.left + pw}" y1="${f(y(0))}" y2="${f(y(0))}"/>`);
 
-  // 선택적 값 라벨: 마지막 실현 연도 막대 위 (10.3 v0.8)
-  if (opts.valueLabel ?? !opts.compact) {
-    const lastReal = [...bars].reverse().find((p) => p.nav > 0 && p.year + 1 <= tau);
-    if (lastReal) {
-      parts.push(`<text class="bar-value" x="${f(x(lastReal.year + 0.5))}" y="${f(y(lastReal.nav) - 7)}" text-anchor="middle">${Math.round(lastReal.nav).toLocaleString('en-US')}</text>`);
-    }
-  }
-
   // 계단형 누적선: 기준일 이전 실선, 이후 점선
   const stepPath = (key: 'cumCall' | 'cumDist', a: number, b: number, steps: readonly StepPoint[] = view.steps): string => {
     let d = `M${f(x(a))},${f(y(valueAt(steps, a, key)))}`;
@@ -176,6 +168,14 @@ export function renderMainChart(view: ScopedView, meta: Meta, opts: ChartOptions
     const cls = key === 'cumCall' ? 'line-call' : 'line-dist';
     if (tau > x0) parts.push(`<path class="line ${cls}" d="${stepPath(key, x0, Math.min(tau, x1))}"/>`);
     if (tau < x1) parts.push(`<path class="line ${cls} line-est" d="${stepPath(key, Math.max(tau, x0), x1)}"/>`);
+  }
+
+  // 선택적 값 라벨: 마지막 실현 연도 막대 위 (10.3 v0.8). 선 위에 보이도록 선 다음에 그림
+  if (opts.valueLabel ?? !opts.compact) {
+    const lastReal = [...bars].reverse().find((p) => p.nav > 0 && p.year + 1 <= tau);
+    if (lastReal) {
+      parts.push(`<text class="bar-value" x="${f(x(lastReal.year + 0.5))}" y="${f(y(lastReal.nav) - 7)}" text-anchor="middle">${Math.round(lastReal.nav).toLocaleString('en-US')}</text>`);
+    }
   }
 
   // 기준일 선

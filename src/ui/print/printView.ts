@@ -97,7 +97,7 @@ function page(spec: PageSpec, portfolio: Portfolio): string {
             yLabels: first,
             asOfText: first,
             width: 400,
-            height: 290,
+            height: 270,
           });
           const delta = s.vsBase ? ` <em>(${signed(s.vsBase.lastExitTime, 2)}년)</em>` : '';
           return `<figure class="print-cell${key === 'base' ? ' is-base' : ''}" data-scenario="${key}">
