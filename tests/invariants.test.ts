@@ -5,7 +5,7 @@ import { yearOf } from '../src/engine/time';
 import { baseInput, uniformScenario } from './fixtures';
 
 // DESIGN.md 11.2 불변 조건.
-// 현재: mock + 8장 5개 시나리오(결정론적 입력). fast-check 무작위 입력은 M5.
+// 현재: mock + 8장 5개 시나리오(결정론적 입력). fast-check 무작위 입력은 M6.
 
 const TOL = 1e-6;
 const FIELDS = ['callInvest', 'callFee', 'dist', 'nav', 'cumCall', 'cumDist'] as const;
@@ -108,6 +108,6 @@ describe('KPI 기준일 정의 (9장)', () => {
 });
 
 describe('11.2 무작위 입력', () => {
-  it.todo('fast-check 무작위 포트폴리오 (M5)');
-  it.todo('실무 모드: 기준일 이전 이벤트·연말 NAV = 기본 가정 결과 (M5)');
+  it.todo('fast-check 무작위 포트폴리오 (M6)');
+  it.todo('실무 모드: 기준일 이전 이벤트·연말 NAV = 기본 가정 결과 (M6)');
 });
