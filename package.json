@@ -1,0 +1,25 @@
+{
+  "name": "kic-bmt-alt-sim",
+  "private": true,
+  "version": "0.1.0",
+  "description": "KIC BMT 과제 ② 대체투자 현금흐름 시뮬레이션 대시보드",
+  "type": "module",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "dev": "vite",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.engine.json",
+    "build": "npm run typecheck && vite build",
+    "build:offline": "npm run typecheck && vite build --config vite.config.offline.ts",
+    "preview": "vite preview",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "fast-check": "^4.10.2",
+    "typescript": "6.0.3",
+    "vite": "^8.3.1",
+    "vite-plugin-singlefile": "^2.3.3",
+    "vitest": "^5.0.2"
+  }
+}

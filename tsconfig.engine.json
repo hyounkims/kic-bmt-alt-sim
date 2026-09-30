@@ -1,0 +1,9 @@
+{
+  // 엔진 순수성 검사: DOM·브라우저 타입 없이 src/engine만 타입체크한다 (CLAUDE.md 코드 규칙).
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2023"],
+    "types": []
+  },
+  "include": ["src/engine"]
+}
