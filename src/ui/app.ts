@@ -173,13 +173,15 @@ function renderTrancheTable(view: ScopedView, out: SimOutput, base: SimOutput | 
     .map((t) => {
       const bt: Tranche | undefined = baseOf.get(`${t.fundId}:${t.investYear}`);
       const done = t.exitTime <= out.meta.asOfTime;
+      // 3.3-D: 기준일 직후 회수 (v0.6)
+      const atAsOf = !done && t.exitTime - out.meta.asOfTime < 1e-6;
       return `<tr class="${done ? 'exited' : ''}" data-tranche="${t.fundId}:${t.investYear}">
         <td>${escapeHtml(names.get(t.fundId) ?? t.fundId)}</td><td>${t.investYear}</td><td>${money(t.amount)}</td>
         <td>${withBase(t.irr, bt?.irr, pct)}</td><td>${withBase(t.moic, bt?.moic, multiple)}</td>
         <td class="tstar">${withBase(t.tStar, bt?.tStar, (v) => v.toFixed(2))}</td>
         <td class="exit-time">${withBase(t.exitTime, bt?.exitTime, yearTime)}</td><td>${withBase(t.exitYear, bt?.exitYear, String)}</td>
         <td>${money(t.exitGross)}</td><td>${money(t.carry)}</td><td>${money(t.exitNet)}</td>
-        <td>${done ? '회수 완료' : '보유'}${t.locked ? ' · 고정' : ''}</td>
+        <td>${done ? '회수 완료' : atAsOf ? '기준일 직후 회수 (추정)' : '보유'}${t.locked ? ' · 고정' : ''}</td>
       </tr>`;
     })
     .join('');
@@ -203,8 +205,8 @@ function renderScenarioTable(c: Computed, state: ViewState): string {
       const last = v?.series.filter((p) => p.year <= v.endYear).at(-1);
       const applied = ASSET_CLASSES.every((cl) => sameShift(state.scenario.irrShift[cl], preset.irrShift) && sameShift(state.scenario.moicShift[cl], preset.moicShift));
       const cells = v && last
-        ? `<td>${v.endYear}</td><td>${money(last.cumCall)}</td><td>${money(last.cumDist)}</td><td>${multiple(v.kpi.tvpi)}</td>`
-        : `<td colspan="4" class="muted">${escapeHtml(output.errors.map((e) => e.message).join(', ') || '범위 없음')}</td>`;
+        ? `<td>${v.endYear}</td><td>${yearTime(v.lastExitTime)}</td><td>${money(last.cumCall)}</td><td>${money(last.cumDist)}</td><td>${multiple(v.kpi.tvpi)}</td>`
+        : `<td colspan="5" class="muted">${escapeHtml(output.errors.map((e) => e.message).join(', ') || '범위 없음')}</td>`;
       return `<tr class="${applied ? 'applied' : ''}">
         <td>${escapeHtml(label(preset.irrShift, preset.moicShift))}</td>${cells}
         <td><button type="button" class="text-btn" data-preset="${preset.key}"${applied ? ' disabled' : ''}>${applied ? '적용 중' : '전 자산군 적용'}</button></td>
@@ -214,7 +216,7 @@ function renderScenarioTable(c: Computed, state: ViewState): string {
   return `<section class="panel">
     <h2>5개 시나리오 비교 <span class="muted">전 자산군 동시 적용 (8장, 3.3-A) · 인쇄본과 같은 구성 · 최대 종료 연도 ${c.scenarios.maxEndYear}</span></h2>
     <div class="table-wrap"><table class="data-table scenario-table">
-      <thead><tr><th>시나리오</th><th>종료 연도</th><th>최종 누적 Call</th><th>최종 누적 Distribution</th><th>기준일 TVPI</th><th></th></tr></thead>
+      <thead><tr><th>시나리오</th><th>종료 연도</th><th>마지막 회수 시각</th><th>최종 누적 Call</th><th>최종 누적 Distribution</th><th>기준일 TVPI</th><th></th></tr></thead>
       <tbody>${rows}</tbody>
     </table></div>
   </section>`;

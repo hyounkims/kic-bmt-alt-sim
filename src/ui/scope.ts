@@ -33,12 +33,14 @@ export interface ScopedView {
   readonly startYear: number;
   /** 차트·표 끝 연도: 범위 내 마지막 회수 연도 (원문 "완전 회수 시점까지") */
   readonly endYear: number;
+  /** 범위 내 마지막 회수 시각 (엔진 lastExit, 9장 v0.6) */
+  readonly lastExitTime: number;
 }
 
 export function selectScope(out: SimOutput, scope: Scope): ScopedView | null {
   const start = out.meta.displayStart;
   if (scope.kind === 'total') {
-    return { title: '대체 포트폴리오 전체', series: out.series.total, steps: out.steps.total, kpi: out.kpi.total, funds: out.funds, tranches: out.tranches, startYear: start, endYear: out.meta.endYear };
+    return { title: '대체 포트폴리오 전체', series: out.series.total, steps: out.steps.total, kpi: out.kpi.total, funds: out.funds, tranches: out.tranches, startYear: start, endYear: out.meta.endYear, lastExitTime: out.lastExit.total };
   }
   if (scope.kind === 'class') {
     const funds = out.funds.filter((f) => f.assetClass === scope.id);
@@ -52,13 +54,15 @@ export function selectScope(out: SimOutput, scope: Scope): ScopedView | null {
       tranches: out.tranches.filter((t) => ids.has(t.fundId)),
       startYear: start,
       endYear: Math.max(start, ...funds.map((f) => f.lastExitYear)),
+      lastExitTime: out.lastExit.byClass[scope.id],
     };
   }
   const fund = out.funds.find((f) => f.id === scope.id);
   const series = out.series.byFund[scope.id];
   const steps = out.steps.byFund[scope.id];
   const kpi = out.kpi.byFund[scope.id];
-  if (!fund || !series || !steps || !kpi) return null;
+  const lastExitTime = out.lastExit.byFund[scope.id];
+  if (!fund || !series || !steps || !kpi || lastExitTime === undefined) return null;
   return {
     title: `${fund.name} (${fund.assetClass}${fund.type === 'direct' ? ' · 직접투자' : ''})`,
     series,
@@ -68,5 +72,6 @@ export function selectScope(out: SimOutput, scope: Scope): ScopedView | null {
     tranches: out.tranches.filter((t) => t.fundId === scope.id),
     startYear: Math.max(start, fund.vintage),
     endYear: fund.lastExitYear,
+    lastExitTime,
   };
 }

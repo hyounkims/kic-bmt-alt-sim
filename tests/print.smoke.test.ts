@@ -57,14 +57,32 @@ describe('인쇄 뷰', () => {
     }
   });
 
-  it('실무 모드: 기준일 이전 실현 막대는 5개 시나리오 모두 기본과 같음', () => {
-    for (const p of pages) {
-      const realBars = (key: string) =>
-        [...(p.querySelector(`.print-cell[data-scenario="${key}"]`)?.querySelectorAll('.bar-real') ?? [])].map((b) => b.getAttribute('d')).join('|');
-      const base = realBars('base');
-      expect(base.length).toBeGreaterThan(0);
-      for (const key of ['irrDown', 'irrUp', 'moicDown', 'moicUp']) expect(realBars(key), key).toBe(base);
-    }
+  it('1페이지 실무 모드: 실현 막대·실현 실선이 5개 시나리오 모두 기본과 같음 (MoIC −20% 기준일 직후 회수 포함, v0.6)', () => {
+    const p = pages[0]!;
+    expect(p.getAttribute('data-mode')).toBe('forward');
+    const realized = (key: string) => {
+      const cell = p.querySelector(`.print-cell[data-scenario="${key}"]`);
+      const bars = [...(cell?.querySelectorAll('.bar-real') ?? [])].map((b) => b.getAttribute('d'));
+      const lines = [...(cell?.querySelectorAll('.line:not(.line-est):not(.key)') ?? [])].map((l) => l.getAttribute('d'));
+      return [...bars, ...lines].join('|');
+    };
+    const base = realized('base');
+    expect(base.length).toBeGreaterThan(0);
+    for (const key of ['irrDown', 'irrUp', 'moicDown', 'moicUp']) expect(realized(key), key).toBe(base);
+  });
+
+  it('2페이지 전 구간 모드 명기, 마지막 회수 시각으로 IRR 회수기간 변동 표시 (12장 PE t*)', () => {
+    const p = pages[1]!;
+    expect(p.getAttribute('data-mode')).toBe('full');
+    expect(p.querySelector('.print-head p')?.textContent).toContain('전 구간 재계산');
+    const lastExit = [...p.querySelectorAll('.print-summary td.last-exit')].map((td) => td.textContent);
+    // 기본 2023 + 4.19, IRR −3%p 2023 + 4.96, IRR +3%p 2023 + 3.64
+    expect(lastExit.slice(0, 3)).toEqual(['2027.19', '2027.96', '2026.64']);
+  });
+
+  it('1페이지 요약 표에도 마지막 회수 시각 열', () => {
+    expect(pages[0]?.querySelectorAll('.print-summary td.last-exit')).toHaveLength(5);
+    expect(pages[0]?.querySelector('.print-summary thead')?.textContent).not.toContain('TVPI');
   });
 
   it('패턴 id가 차트마다 고유', () => {
