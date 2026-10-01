@@ -67,9 +67,9 @@ export function simulate(input: SimInput): SimOutput {
   const funds: FundInfo[] = [];
   for (const fund of portfolio.funds) {
     const a = adjustAssumptions(fund, scenario, options);
-    const { tranches, feeSchedule } = buildTranches(fund, a, fees);
+    const { tranches, feeSchedule, postFee } = buildTranches(fund, a, fees);
     const events = [...trancheEvents(tranches), ...feeEvents(fund, feeSchedule)];
-    fundCalcs.push({ fund, tranches, events });
+    fundCalcs.push({ fund, tranches, events, postFee });
     funds.push({
       id: fund.id,
       name: fund.name,

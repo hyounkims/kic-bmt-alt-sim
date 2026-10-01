@@ -1,6 +1,6 @@
-// 집행분 생성·가정 조정·집행분 계산 (DESIGN.md 7.1~7.4, v0.9 분기 인식·약정 내 보수)
+// 집행분 생성·가정 조정·집행분 계산 (DESIGN.md 7.1~7.4, v0.9 분기 인식, v0.10 관리보수 B안)
 
-import { feeSchedule, type FeeItem } from './fees';
+import { accruedPostFee, investFeeSchedule, postFeeTerms, type FeeItem, type PostFeeTerms } from './fees';
 import type { Fees, Fund, NavBasis, Options, Scenario, Tranche } from './types';
 import { asYear, asYearTime, qEndTime, qOfYearStart, qYear, quarterOfReach, startOf, type QIndex, type Year, reachDateOf } from './time';
 
@@ -33,8 +33,12 @@ export function effectivePeriod(fund: Fund): number {
 
 export interface FundBuild {
   readonly tranches: Tranche[];
-  /** 보수 일정 (7.4) — 총보수 F = 합계 */
+  /** 집행기간 보수 Call 일정 (7.4) */
   readonly feeSchedule: FeeItem[];
+  /** 집행기간 이후 보수 조건 (7.4 v0.10) */
+  readonly postFee: PostFeeTerms;
+  /** 회수금에서 다 빼지 못한 보수 (검증용, 정상 입력은 0) */
+  readonly unpaidPostFee: number;
 }
 
 /** 집행 연도별 도달 시각·회수 분기 (금액과 무관) */
@@ -47,28 +51,33 @@ function timings(fund: Fund, a: Assumptions) {
     const exitQuarter = quarterOfReach(reachTime);
     return { investYear, reachTime, exitQuarter };
   });
-  return { n, tStar, rows, lastExitYear: Math.max(...rows.map((r) => qYear(r.exitQuarter))) };
+  return { n, tStar, rows };
 }
 
-/** 펀드 총보수 F (7.4). 검증(F < 약정)과 집행 금액 계산에 사용 */
-export function fundFeeTotal(fund: Fund, a: Assumptions, fees: Fees): number {
-  const t = timings(fund, a);
-  return feeSchedule(fund, t.n, t.lastExitYear, fees).reduce((s, f) => s + f.amount, 0);
-}
 
 /**
- * 7.1 + 7.3 + 7.4 (v0.9): 회수 분기 → 보수 일정·총보수 F → 집행 금액 A = (약정 − F) / n.
- * 회수는 도달 시각 T가 속한 분기의 분기말에 인식(보고), 현금흐름은 T에 A × M′ (가정 4, v0.9.2)
+ * 7.1 + 7.3 + 7.4 (v0.10 B안): 매년 Call C/n 중 집행기간 보수를 빼고 투자 A = C/n − C × mgmtInvest.
+ * 회수는 도달 시각 T가 속한 분기의 분기말에 인식(보고), 현금흐름은 T에 A × M′ (가정 4, v0.9.2).
+ * 집행기간 이후 보수는 기간 비례로 쌓이고, 회수할 때마다 그 회수 분기 말까지의 미지급분을 회수금에서 뺀다
  */
 export function buildTranches(fund: Fund, a: Assumptions, fees: Fees): FundBuild {
   const t = timings(fund, a);
-  const schedule = feeSchedule(fund, t.n, t.lastExitYear, fees);
-  const totalFee = schedule.reduce((s, f) => s + f.amount, 0);
-  const amount = (fund.commitment - totalFee) / t.n;
+  const schedule = investFeeSchedule(fund, t.n, fees);
+  const amount = fund.commitment / t.n - (schedule[0]?.amount ?? 0);
   const exitGross = amount * a.moic;
   const carry = fund.type === 'direct' ? 0 : fees.carry * (exitGross - amount);
+  const lastExitQuarter = Math.max(...t.rows.map((r) => r.exitQuarter)) as QIndex;
+  const postFee = postFeeTerms(fund, t.n, qEndTime(lastExitQuarter), fees);
+  // 도달 시각 순으로 미지급분을 차감 (모자라면 다음 회수로 이월)
+  let paid = 0;
+  const netted = t.rows.map((r) => {
+    const due = Math.max(0, accruedPostFee(postFee, qEndTime(r.exitQuarter)) - paid);
+    const take = Math.min(due, exitGross - carry);
+    paid += take;
+    return take;
+  });
   const tranches = t.rows.map(
-    (r): Tranche => ({
+    (r, i): Tranche => ({
       fundId: fund.id,
       investYear: r.investYear,
       amount,
@@ -82,10 +91,17 @@ export function buildTranches(fund: Fund, a: Assumptions, fees: Fees): FundBuild
       exitYear: qYear(r.exitQuarter),
       exitGross,
       carry,
-      exitNet: exitGross - carry,
+      feeNetted: netted[i] ?? 0,
+      exitNet: exitGross - carry - (netted[i] ?? 0),
     }),
   );
-  return { tranches, feeSchedule: schedule };
+  return { tranches, feeSchedule: schedule, postFee, unpaidPostFee: Math.max(0, accruedPostFee(postFee, postFee.end) - paid) };
+}
+
+/** 7.4 분기말 q의 미지급 보수 = 그때까지 쌓인 보수 − 회수 분기 ≤ q인 집행분의 차감 합 (Net NAV에서 차감) */
+export function unpaidPostFeeAt(postFee: PostFeeTerms, tranches: readonly Tranche[], q: QIndex): number {
+  const paid = tranches.filter((t) => t.exitQuarter <= q).reduce((s, t) => s + t.feeNetted, 0);
+  return Math.max(0, accruedPostFee(postFee, qEndTime(q)) - paid);
 }
 
 /** 가치 공식: A × (1 + r′)^(τ − Y) */

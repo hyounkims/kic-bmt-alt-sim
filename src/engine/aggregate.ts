@@ -1,7 +1,8 @@
 // 이벤트 생성·집계·구간 판정 (DESIGN.md 7.5~7.6, v0.9 분기 기준)
 
+import type { PostFeeTerms } from './fees';
 import type { CashEvent, Fees, Fund, KpiPoint, NavBasis, Phase, SeriesPoint, StepPoint, Tranche } from './types';
-import { applyNavBasis, trancheValueAtQuarter, trancheYearEndNav } from './tranches';
+import { applyNavBasis, trancheValueAtQuarter, trancheYearEndNav, unpaidPostFeeAt } from './tranches';
 import { qOfYearStart, startOf, type QIndex, type Year, type YearTime } from './time';
 
 /** 펀드 하나의 계산 결과 */
@@ -9,6 +10,8 @@ export interface FundCalc {
   readonly fund: Fund;
   readonly tranches: readonly Tranche[];
   readonly events: readonly CashEvent[];
+  /** 집행기간 이후 보수 조건 (7.4 v0.10) */
+  readonly postFee: PostFeeTerms;
 }
 
 export interface AggregateContext {
@@ -55,6 +58,7 @@ interface MutablePoint {
   callInvest: number;
   callFee: number;
   dist: number;
+  feeNetted: number;
   nav: number;
 }
 
@@ -62,7 +66,7 @@ function toSeries(ctx: AggregateContext, raw: readonly MutablePoint[]): SeriesPo
   let cumCall = 0;
   let cumDist = 0;
   return yearsOf(ctx).map((year, i) => {
-    const p = raw[i] ?? { callInvest: 0, callFee: 0, dist: 0, nav: 0 };
+    const p = raw[i] ?? { callInvest: 0, callFee: 0, dist: 0, feeNetted: 0, nav: 0 };
     cumCall += p.callInvest + p.callFee;
     cumDist += p.dist;
     return { year, phase: phaseOf(year, ctx.asOfYear), ...p, cumCall, cumDist };
@@ -72,7 +76,7 @@ function toSeries(ctx: AggregateContext, raw: readonly MutablePoint[]): SeriesPo
 /** 7.5 여러 펀드의 연도별 집계 (범위: calcStart ~ endYear, 누적은 calcStart부터) */
 export function seriesOf(fcs: readonly FundCalc[], ctx: AggregateContext): SeriesPoint[] {
   const years = yearsOf(ctx);
-  const raw: MutablePoint[] = years.map(() => ({ callInvest: 0, callFee: 0, dist: 0, nav: 0 }));
+  const raw: MutablePoint[] = years.map(() => ({ callInvest: 0, callFee: 0, dist: 0, feeNetted: 0, nav: 0 }));
   for (const fc of fcs) {
     for (const e of fc.events) {
       const p = raw[e.year - ctx.calcStart];
@@ -81,6 +85,10 @@ export function seriesOf(fcs: readonly FundCalc[], ctx: AggregateContext): Serie
       else if (e.type === 'fee') p.callFee += e.amount;
       else p.dist += e.amount;
     }
+    for (const t of fc.tranches) {
+      const p = raw[t.exitYear - ctx.calcStart];
+      if (p) p.feeNetted += t.feeNetted;
+    }
     const isDirect = fc.fund.type === 'direct';
     years.forEach((y, i) => {
       const p = raw[i];
@@ -88,6 +96,8 @@ export function seriesOf(fcs: readonly FundCalc[], ctx: AggregateContext): Serie
       for (const t of fc.tranches) {
         p.nav += applyNavBasis(trancheYearEndNav(t, y), t, isDirect, ctx.fees, ctx.navBasis);
       }
+      // Net NAV: 집행기간 이후 보수 미지급분 차감 (3.5·7.4 v0.10). 연말 = 그해 Q4 말
+      if (ctx.navBasis === 'net') p.nav -= unpaidPostFeeAt(fc.postFee, fc.tranches, (4 * y + 3) as QIndex);
     });
   }
   return toSeries(ctx, raw);
@@ -123,6 +133,7 @@ export function kpiOf(fcs: readonly FundCalc[], ctx: AggregateContext): KpiPoint
     for (const t of fc.tranches) {
       nav += applyNavBasis(trancheValueAtQuarter(t, ctx.asOfQuarter), t, isDirect, ctx.fees, ctx.navBasis);
     }
+    if (ctx.navBasis === 'net') nav -= unpaidPostFeeAt(fc.postFee, fc.tranches, ctx.asOfQuarter);
   }
   return {
     cumCall,

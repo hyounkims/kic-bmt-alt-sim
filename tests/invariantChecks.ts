@@ -23,7 +23,7 @@ export function checkInvariants(input: SimInput, out: SimOutput): void {
   const last = total[total.length - 1];
   const funds = new Map(input.portfolio.funds.map((f) => [f.id, f]));
 
-  // v0.9 3.4: 누적 Call(투자 + 보수) 총합 = 약정 합계, 투자 합 = 약정 − 보수
+  // v0.10 3.4: 누적 Call(투자 + 집행기간 보수) 총합 = 약정 합계, 펀드별 매년 Call = C / n
   const commitments = input.portfolio.funds.reduce((s, f) => s + f.commitment, 0);
   const investSum = total.reduce((s, p) => s + p.callInvest, 0);
   const feeSum = total.reduce((s, p) => s + p.callFee, 0);
@@ -33,6 +33,16 @@ export function checkInvariants(input: SimInput, out: SimOutput): void {
   for (const f of input.portfolio.funds) {
     const s = out.series.byFund[f.id] ?? [];
     near(s.at(-1)?.cumCall, f.commitment, tol, `${f.id} Call 합 = 약정`);
+    const n = f.type === 'direct' ? 1 : f.investPeriod;
+    for (let k = 0; k < n; k++) {
+      const p = s.find((x) => x.year === f.vintage + k);
+      near((p?.callInvest ?? 0) + (p?.callFee ?? 0), f.commitment / n, tol, `${f.id} ${f.vintage + k} Call = C/n`);
+    }
+    // v0.10 7.4: 보수 차감 합 = C × mgmtPost × (마지막 회수 분기 말 − (V + n)), 음수 아님
+    const ts = out.tranches.filter((t) => t.fundId === f.id);
+    const lastEnd = Math.max(...ts.map((t) => qEndTime(t.exitQuarter)));
+    const expected = f.type === 'direct' ? 0 : f.commitment * input.portfolio.fees.mgmtPost * Math.max(0, lastEnd - (f.vintage + n));
+    near(ts.reduce((a, t) => a + t.feeNetted, 0), expected, tol, `${f.id} 보수 차감 합`);
   }
 
   // 회수 총액 = A × M′, 성과보수 = carry × (회수 총액 − A), direct는 0
@@ -40,7 +50,9 @@ export function checkInvariants(input: SimInput, out: SimOutput): void {
     near(t.exitGross, t.amount * t.moic, tol, `${t.fundId} ${t.investYear} 회수 총액`);
     const carry = funds.get(t.fundId)?.type === 'direct' ? 0 : input.portfolio.fees.carry * (t.exitGross - t.amount);
     near(t.carry, carry, tol, `${t.fundId} 성과보수`);
-    near(t.exitNet, t.exitGross - t.carry, tol, `${t.fundId} 순회수`);
+    near(t.exitNet, t.exitGross - t.carry - t.feeNetted, tol, `${t.fundId} Distribution = 회수 − 성과보수 − 보수 차감`);
+    expect(t.feeNetted, `${t.fundId} 보수 차감 ≥ 0`).toBeGreaterThanOrEqual(0);
+    expect(t.exitNet, `${t.fundId} Distribution ≥ 0`).toBeGreaterThanOrEqual(0);
     expect(t.exitTime, `${t.fundId} 회수 시각 > 투자 시각`).toBeGreaterThan(t.investYear);
     // v0.9 7.3: 회수는 도달 시각이 속한 분기의 분기말
     expect(t.exitQuarter, `${t.fundId} 회수 분기`).toBe(quarterOfReach(t.reachTime));
@@ -67,7 +79,7 @@ export function checkInvariants(input: SimInput, out: SimOutput): void {
     // v0.9.2: dist 시각 = 도달 시각 T, T ≤ 회수 분기말, T가 속한 분기 = 이벤트 분기
     else {
       expect(quarterOfReach(e.time)).toBe(e.quarter);
-      expect(e.time).toBeLessThanOrEqual(qEndTime(e.quarter) + 1e-12);
+      expect(e.time).toBeLessThanOrEqual(qEndTime(e.quarter) + 1e-9);
     }
     expect(qYear(e.quarter)).toBe(e.year);
     const b = byYear.get(y) ?? { call: 0, fee: 0, dist: 0 };

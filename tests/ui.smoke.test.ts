@@ -82,8 +82,8 @@ describe('기본 대시보드 (전체, 기준일 2026-09-30)', () => {
     expect(root.querySelectorAll('.hit')).toHaveLength(8);
     expect(root.querySelectorAll('.tranche-table tbody tr')).toHaveLength(4);
     const callCard = [...root.querySelectorAll('.kpi-card')].find((c) => c.querySelector('.kpi-label')?.textContent === '누적 Capital Call');
-    // 2026 Q3까지: 투자 66 × 4 + 보수 2020~23 연 6 + 2024~26 연 3 = 264 + 24 + 9 = 297 (v0.9 약정 내 보수)
-    expect(callCard?.querySelector('.kpi-value')?.textContent).toBe('297.0'); // 투자 300 + 보수 2020~23 연 6(24) + 2024~26 연 3(9)
+    // 2026 Q3까지: 2020~2023 매년 75 Call (투자 69 + 보수 6) = 300, 이후 보수는 회수금에서 차감 (v0.10)
+    expect(callCard?.querySelector('.kpi-value')?.textContent).toBe('300.0');
   });
 
   it('보기 범위 전환: 자산군 PD', () => {
@@ -227,7 +227,7 @@ describe('민감도 조정 (M4)', () => {
     expect([...root.querySelectorAll('.scenario-table tbody tr')][0]?.querySelector('td.delta')?.textContent).toBe('—');
   });
 
-  it('M9: 펀드별 성과 탭 — AAA VII 예상 Net IRR 12.00%·MoIC 1.58x, 전체 Call 3,000 (11.1)', () => {
+  it('M9: 펀드별 성과 탭 — AAA VII 예상 Net IRR 12.29%·MoIC 1.62x, 전체 Call 3,000 (11.1 v0.10)', () => {
     click(root, 'button[data-tab="performance"]');
     expect(root.querySelector<HTMLElement>('[data-tab-panel="performance"]')?.hidden).toBe(false);
     // 다시 그리면 DOM이 바뀌므로 매번 새로 찾는다
@@ -245,18 +245,18 @@ describe('민감도 조정 (M4)', () => {
     click(root, 'button[data-perf-bulk="expand"]');
     expect([...root.querySelectorAll('[data-tab-panel="performance"] .perf-table tbody tr')].every((tr) => !(tr as HTMLElement).hidden)).toBe(true);
     const aaa = [...(rowOf('AAA VII')?.querySelectorAll('td.net') ?? [])].map((td) => td.textContent);
-    expect(aaa).toEqual(['12.00%', '1.58x']);
+    expect(aaa).toEqual(['12.29%', '1.62x']);
     expect(rowOf('대체 포트폴리오 전체')?.querySelectorAll('td')[2]?.textContent).toBe('3,000.0');
     expect(rowOf('XXX (직접투자)')?.querySelector('td.net')?.textContent).toBe('30.00%');
     // 민감도를 바꾸면 괄호에 기본값
     click(root, shiftBtn('PE', 'irr', -0.03));
-    expect(rowOf('AAA VII')?.querySelector('td.net')?.textContent).toContain('(12.00%)');
+    expect(rowOf('AAA VII')?.querySelector('td.net')?.textContent).toContain('(12.29%)');
   });
 
   it('M9: 대표 영역에 예상 최종 Net IRR 카드', () => {
     const perf = root.querySelector('.kpi-perf');
     expect(perf?.querySelector('.kpi-label')?.textContent).toBe('예상 최종 Net IRR');
     // 노트는 3줄 고정 (10.1 v0.9.3). BBB IX 2027 + 4.1878 → 2032년(366일) 69일째 = 3/9
-    expect([...(perf?.querySelectorAll('.kpi-note span') ?? [])].map((e) => e.textContent)).toEqual(['Net MoIC 1.55x', '2032 Q1 (3/9)', '회수 완료']);
+    expect([...(perf?.querySelectorAll('.kpi-note span') ?? [])].map((e) => e.textContent)).toEqual(['Net MoIC 1.57x', '2032 Q1 (3/9)', '회수 완료']); // 1.57x: 4,724.82 / 3,000 (11.1 v0.10)
   });
 });

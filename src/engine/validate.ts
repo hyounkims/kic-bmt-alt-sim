@@ -10,7 +10,7 @@ import {
   MOCK_FUND_COUNT,
   MOCK_TOTAL_COMMITMENT,
 } from './constants';
-import { adjustAssumptions, fundFeeTotal, type Assumptions } from './tranches';
+import { adjustAssumptions, buildTranches, type Assumptions } from './tranches';
 import { isValidIsoDate, type Year } from './time';
 import { ASSET_CLASSES, type AssetClass, type Fees, type Fund, type FundType, type Portfolio, type SimError, type SimInput } from './types';
 
@@ -157,10 +157,12 @@ export function validateInput(input: SimInput): SimError[] {
     const a = adjustAssumptions(f, scenario, options);
     const boundErrors = checkAdjustedBounds(f, a, p);
     errors.push(...boundErrors);
-    // 6장 v0.9: 총보수 < 약정 (투자금이 0 이하가 되지 않도록)
+    // 6장 v0.10: 집행기간 보수 < 매년 Call(투자금 > 0), 집행기간 이후 보수는 회수금에서 모두 차감 가능
     if (boundErrors.length === 0 && f.commitment > 0 && Number.isInteger(f.investPeriod) && f.investPeriod >= 1) {
-      const fee = fundFeeTotal(f, a, portfolio.fees);
-      if (!(fee < f.commitment)) errors.push(err('FEE_EXCEEDS', `${f.name}: 총보수 ${fee.toFixed(1)} ≥ 약정 ${f.commitment}`, `${p}.commitment`));
+      const build = buildTranches(f, a, portfolio.fees);
+      const amount = build.tranches[0]?.amount ?? 0;
+      if (!(amount > 0)) errors.push(err('FEE_EXCEEDS', `${f.name}: 집행기간 관리보수가 매년 Call(${(f.commitment / f.investPeriod).toFixed(1)}) 이상`, `${p}.commitment`));
+      else if (build.unpaidPostFee > 1e-9) errors.push(err('FEE_EXCEEDS', `${f.name}: 집행기간 이후 관리보수 ${build.unpaidPostFee.toFixed(1)}를 회수금에서 차감할 수 없음`, `${p}.commitment`));
     }
   });
 

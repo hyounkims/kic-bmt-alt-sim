@@ -60,8 +60,8 @@ describe('인쇄 뷰', () => {
     // AAA VII IRR +3%p: 2027 Q1 → 2026 Q3 (2023 + 3.64, 12장) = −2분기
     expect(p2.querySelector('.print-cell[data-scenario="irrUp"] figcaption')?.textContent).toContain('2026 Q3 (−2분기)');
     expect(p2.querySelector('.print-summary tr.is-base td')?.textContent).toBe('기본');
-    // MoIC −20%: 보수 30 → 집행분 67.5, 순회수 99.9 × 4 = 399.6, 기본 475.2 대비 −75.6 (손 계산)
-    expect(p2.querySelectorAll('.print-summary tbody tr')[3]?.querySelectorAll('td.delta')[1]?.textContent).toBe('−75.6');
+    // MoIC −20%: 402.48, 기본 487.05 대비 −84.57 (11.1 v0.10) → 표시 −84.6
+    expect(p2.querySelectorAll('.print-summary tbody tr')[3]?.querySelectorAll('td.delta')[1]?.textContent).toBe('−84.6');
   });
 
   it('기본 기준일 2026-09-30: 2025까지 채움, 2026부터 빗금 (모든 차트)', () => {

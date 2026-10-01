@@ -70,14 +70,14 @@ describe('summarizeScenarios (8장)', () => {
     near(rows[0]?.finalCumCall, 3000, 1e-6);
   });
 
-  it('AAA VII: IRR +3%p 마지막 회수 2026 Q3 (−2분기), MoIC −20% 최종 Distribution 399.6 (−75.6)', () => {
+  it('AAA VII: IRR +3%p 마지막 회수 2026 Q3 (−2분기), MoIC −20% 최종 Distribution 402.48 (−84.57, 11.1 v0.10)', () => {
     const rows = summarizeScenarios(runs, { kind: 'fund', id: 'AAA_VII' });
     expect(rows[0]?.lastExitQuarter).toBe(qIndexOf(2027, 1));
     expect(rows[2]?.lastExitQuarter).toBe(qIndexOf(2026, 3));
     expect(rows[2]?.vsBase?.lastExitQuarters).toBe(-2);
-    // MoIC −20%: t* 2.84 → 2025 Q4 마지막, 보수 24 + 6 = 30 → 집행분 67.5 → 순회수 99.9 × 4
-    near(rows[3]?.finalCumDist, 399.6, 1e-6);
-    near(rows[3]?.vsBase?.finalCumDist, -75.6, 1e-6);
+    // MoIC −20%: t* 2.84 → 2025 Q4 마지막 회수, 이후 보수 2024.0~2026.0 연 3 → 6 차감
+    near(rows[3]?.finalCumDist, 402.48, 1e-6);
+    near(rows[3]?.vsBase?.finalCumDist, -84.57, 1e-6);
     expect(rows[3]?.endYear).toBe(2025);
     near(rows[3]?.finalCumCall, 300, 1e-6);
   });

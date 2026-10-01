@@ -125,6 +125,9 @@ export interface Tranche {
   readonly exitYear: Year;
   readonly exitGross: number;
   readonly carry: number;
+  /** 회수금에서 차감한 집행기간 이후 관리보수 (7.4 v0.10) */
+  readonly feeNetted: number;
+  /** Distribution = 회수 총액 − 성과보수 − 보수 차감 */
   readonly exitNet: number;
 }
 
@@ -147,8 +150,12 @@ export interface SeriesPoint {
   readonly year: Year;
   readonly phase: Phase;
   readonly callInvest: number;
+  /** 집행기간 관리보수 Call */
   readonly callFee: number;
+  /** 보수 차감 후 Distribution */
   readonly dist: number;
+  /** 그해 회수금에서 차감한 관리보수 (v0.10) */
+  readonly feeNetted: number;
   /** 연말 NAV (navBasis 기준) */
   readonly nav: number;
   readonly cumCall: number;

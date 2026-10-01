@@ -40,25 +40,25 @@ describe('11.1 정답 케이스 (v0.9)', () => {
     const series = fundSeries(base, 'AAA_VII');
     const last = series[series.length - 1];
 
-    it('관리보수 2020~2023 연 6, 2024~2027 연 3 → 36 (약정 안)', () => {
+    it('Capital Call 2020~2023 매년 75 (관리보수 6 포함) → 합계 300 (v0.10)', () => {
       const fees = base.events.filter((e) => e.fundId === 'AAA_VII' && e.type === 'fee');
-      expect(fees.map((e) => e.year)).toEqual([2020, 2021, 2022, 2023, 2024, 2025, 2026, 2027]);
-      fees.forEach((e) => expectExact(e.amount, e.year < 2024 ? 6 : 3, `${e.year} 관리보수`));
-      expectExact(series.reduce((s, p) => s + p.callFee, 0), 36, '관리보수 합계');
+      expect(fees.map((e) => e.year)).toEqual([2020, 2021, 2022, 2023]);
+      fees.forEach((e) => expectExact(e.amount, 6, `${e.year} 관리보수`));
+      [2020, 2021, 2022, 2023].forEach((y) => expectExact(at(series, y).callInvest + at(series, y).callFee, 75, `${y} Call`));
     });
 
-    it('집행분 금액 (300 − 36) / 4 = 66', () => {
+    it('집행분 금액 75 − 6 = 69', () => {
       expect(tr.map((t) => t.investYear)).toEqual([2020, 2021, 2022, 2023]);
-      tr.forEach((t) => expectExact(t.amount, 66, `${t.investYear} 집행분`));
+      tr.forEach((t) => expectExact(t.amount, 69, `${t.investYear} 집행분`));
     });
 
-    it('2020 집행분 연말 NAV 2020~2023 = 77.88 / 91.90 / 108.44 / 127.96', () => {
+    it('2020 집행분 연말 NAV 2020~2023 = 81.42 / 96.08 / 113.37 / 133.78', () => {
       const t2020 = tr[0];
       expect(t2020?.investYear).toBe(2020);
       if (!t2020) return;
-      [77.88, 91.9, 108.44, 127.96].forEach((v, i) => expectDisplay(trancheYearEndNav(t2020, asYear(2020 + i)), v, `${2020 + i} 연말 NAV`));
+      [81.42, 96.08, 113.37, 133.78].forEach((v, i) => expectDisplay(trancheYearEndNav(t2020, asYear(2020 + i)), v, `${2020 + i} 연말 NAV`));
       expectExact(trancheYearEndNav(t2020, asYear(2024)), 0, '2024(회수 연도) 연말 NAV');
-      expectDisplay(at(series, 2020).nav, 77.88, '펀드 2020 연말 NAV');
+      expectDisplay(at(series, 2020).nav, 81.42, '펀드 2020 연말 NAV');
     });
 
     it('집행분 회수 분기 2024 Q1 / 2025 Q1 / 2026 Q1 / 2027 Q1 (분기말 인식)', () => {
@@ -71,25 +71,38 @@ describe('11.1 정답 케이스 (v0.9)', () => {
       expect(tr.map((t) => t.reachDate)).toEqual(['2024-03-09', '2025-03-10', '2026-03-10', '2027-03-10']);
     });
 
-    it('집행분 순회수 118.8 (132 − 13.2)', () => {
+    it('회수 총액 138, 성과보수 13.8, 이후 보수 차감 0.75 / 3 / 3 / 3, Distribution 123.45 / 121.20 / 121.20 / 121.20 (v0.10)', () => {
       for (const t of tr) {
-        expectExact(t.exitGross, 132, '회수 총액');
-        expectExact(t.carry, 13.2, '성과보수');
-        expectExact(t.exitNet, 118.8, '순회수');
+        expectExact(t.exitGross, 138, '회수 총액');
+        expectExact(t.carry, 13.8, '성과보수');
       }
+      [0.75, 3, 3, 3].forEach((v, i) => expectExact(tr[i]?.feeNetted, v, `${2020 + i} 보수 차감`));
+      [123.45, 121.2, 121.2, 121.2].forEach((v, i) => expectExact(tr[i]?.exitNet, v, `${2020 + i} Distribution`));
     });
 
-    it('예상 최종 Net MoIC 1.58x (475.2 / 300) / Net IRR 12.00% (7.8 v0.9.2, 독립 계산)', () => {
+    it('2024년 말 Net NAV 313.73 (미지급 보수 2.25 차감, v0.10)', () => {
+      const net = simulate(baseInput({ options: { navBasis: 'net' } }));
+      expectDisplay(at(fundSeries(net, 'AAA_VII'), 2024).nav, 313.73, '2024 Net NAV');
+    });
+
+    it('예상 최종 Net MoIC 1.62x (487.05 / 300) / Net IRR 12.29% (7.8, 독립 계산)', () => {
       const perf = base.performance.byFund['AAA_VII'];
-      expectExact(perf?.netMoic, 475.2 / 300, 'Net MoIC');
-      expectDisplay(perf?.netMoic, 1.58, 'Net MoIC 표시값');
-      // 표시값 12.00% → 소수 0.1200 ± 0.0001 (CLAUDE.md 표시값 허용 오차를 % 단위로)
-      expect(Math.abs((perf?.netIrr ?? Number.NaN) - 0.12)).toBeLessThanOrEqual(0.0001);
+      expectExact(perf?.netMoic, 487.05 / 300, 'Net MoIC');
+      expectDisplay(perf?.netMoic, 1.62, 'Net MoIC 표시값');
+      // 표시값 12.29% → 소수 0.1229 ± 0.0001 (CLAUDE.md 표시값 허용 오차를 % 단위로)
+      expect(Math.abs((perf?.netIrr ?? Number.NaN) - 0.1229)).toBeLessThanOrEqual(0.0001);
     });
 
-    it('누적 Distribution 475.2, 누적 Capital Call 300 (= 약정)', () => {
-      expectExact(last?.cumDist, 475.2, '최종 누적 Distribution');
+    it('누적 Distribution 487.05, 누적 Capital Call 300 (= 약정)', () => {
+      expectExact(last?.cumDist, 487.05, '최종 누적 Distribution');
       expectExact(last?.cumCall, 300, '최종 누적 Capital Call');
+    });
+
+    it('MoIC −20% Distribution 402.48 (기본 대비 −84.57)', () => {
+      const down = simulate(baseInput({ scenario: uniformScenario(0, -0.2) }));
+      const d = fundSeries(down, 'AAA_VII').at(-1)?.cumDist;
+      expectExact(d, 402.48, 'MoIC −20% Distribution');
+      expectExact((d ?? 0) - 487.05, -84.57, 'Δ Distribution');
     });
   });
 
@@ -135,21 +148,21 @@ describe('11.1 정답 케이스 (v0.9)', () => {
     const series = fundSeries(base, 'DDD_VI');
     const upTo2016 = series.filter((p) => p.year <= 2016);
 
-    it('총보수 32 (2015~2020 연 4 + 2021~2024 연 2) → 집행분 28', () => {
-      expectExact(series.reduce((s, p) => s + p.callFee, 0), 32, '총보수');
-      tranchesOf(base, 'DDD_VI').forEach((t) => expectExact(t.amount, 28, `${t.investYear} 집행분`));
+    it('집행분 200 / 6 − 4 = 29.33 (v0.10)', () => {
+      expectExact(series.reduce((s, p) => s + p.callFee, 0), 24, '집행기간 보수 Call 합계 (6년 × 4)');
+      tranchesOf(base, 'DDD_VI').forEach((t) => expectDisplay(t.amount, 29.33, `${t.investYear} 집행분`));
     });
 
-    it('누적 투자 Call 56.00', () => {
-      expectDisplay(upTo2016.reduce((s, p) => s + p.callInvest, 0), 56, '누적 투자 Call');
+    it('누적 투자 Call 58.67', () => {
+      expectDisplay(upTo2016.reduce((s, p) => s + p.callInvest, 0), 58.67, '누적 투자 Call');
     });
 
     it('누적 관리보수 8.00', () => {
       expectDisplay(upTo2016.reduce((s, p) => s + p.callFee, 0), 8.0, '누적 관리보수');
     });
 
-    it('NAV 68.31', () => {
-      expectDisplay(at(upTo2016, 2016).nav, 68.31, '2016 연말 NAV');
+    it('NAV 71.56', () => {
+      expectDisplay(at(upTo2016, 2016).nav, 71.56, '2016 연말 NAV');
     });
   });
 
@@ -168,6 +181,13 @@ describe('11.1 정답 케이스 (v0.9)', () => {
 
     it('최종 누적 Capital Call 3,000 (= 약정 합계)', () => {
       expectExact(base.series.total.at(-1)?.cumCall, 3000, '최종 누적 Call');
+    });
+
+    it('최종 누적 Distribution 4,724.82 / Net MoIC 1.57x / Net IRR 11.62%, 실제 투자금 2,768 (v0.10)', () => {
+      expectDisplay(base.series.total.at(-1)?.cumDist, 4724.82, '최종 누적 Distribution');
+      expectDisplay(base.performance.total.netMoic, 1.57, 'Net MoIC');
+      expect(Math.abs((base.performance.total.netIrr ?? Number.NaN) - 0.1162)).toBeLessThanOrEqual(0.0001);
+      expectDisplay(base.tranches.reduce((s, t) => s + t.amount, 0), 2768, '실제 투자금');
     });
   });
 
