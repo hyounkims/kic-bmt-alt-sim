@@ -26,12 +26,6 @@ export function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] ?? c);
 }
 
-/** 로컬 날짜 YYYY-MM-DD (toISOString은 UTC라 KST 오전에 전날이 됨) */
-export function localIsoDate(d: Date): string {
-  const p = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
-}
-
 /** 분기 표기: 2027 Q2 (v0.9) */
 export const quarterLabel = (q: QIndex): string => `${qYear(q)} Q${qNumber(q)}`;
 

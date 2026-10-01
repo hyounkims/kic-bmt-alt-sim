@@ -32,7 +32,7 @@ export const ZERO_SCENARIO: Scenario = {
   moicShift: byClassOf(0),
 };
 
-/** 5장 입력 예시의 기본 옵션. 화면 기준일은 UI가 오늘 날짜로 덮어쓴다 (3.2) */
+/** 5장 입력 예시의 기본 옵션. 화면·인쇄 기준일 기본값 2026-09-30 (3.2 v0.9.1) */
 export const DEFAULT_OPTIONS: Options = {
   asOf: PRINT_AS_OF,
   irrShiftMode: 'pp',
