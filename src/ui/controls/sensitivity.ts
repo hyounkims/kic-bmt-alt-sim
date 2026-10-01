@@ -93,7 +93,7 @@ function renderSettings(s: Settings): string {
     <div class="settings-grid">
       <label class="control"><span>IRR 조정 해석</span>${sel('irrShiftMode', s.irrShiftMode, [['pp', '%p 가감 (18% → 15%)'], ['relative', '상대 변동 (18% → 17.46%)']])}</label>
       <label class="control"><span>MoIC 조정 해석</span>${sel('moicShiftMode', s.moicShiftMode, [['relative', '상대 변동 (2.0x → 1.6x)'], ['absolute', '절대 가감 (2.0x → 1.8x)']])}</label>
-      <label class="control"><span>NAV 기준</span>${sel('navBasis', s.navBasis, [['gross', 'Gross (평가가치 합)'], ['net', 'Net (미실현 이익 × 20% 차감)']])}</label>
+      <label class="control"><span>NAV 기준</span>${sel('navBasis', s.navBasis, [['gross', 'Gross (평가가치 합)'], ['net', 'Net (성과보수 예상분·미지급 보수 차감)']])}</label>
       <label class="check"><input type="checkbox" data-setting="applyToDirect"${s.applyToDirect ? ' checked' : ''} /> PE 조정을 XXX(직접투자)에도 적용</label>
     </div>
   </details>`;

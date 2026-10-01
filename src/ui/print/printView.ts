@@ -127,10 +127,9 @@ function page(spec: PageSpec, portfolio: Portfolio, asOf: string): string {
       <div class="print-notes">
         <strong>가정 요약</strong>
         <ul>
-          <li>매년 1/1 균등 투자, gIRR로 성장, MoIC 도달일 회수(분기 단위 보고)</li>
-          <li>관리보수 2%·1%는 약정 안: 투자금 = 약정 − 총보수, 누적 Call = 약정</li>
-          <li>성과보수 (회수액 − 원금) × 20%, XXX 보수 없음, Net = 보수 차감 후</li>
-          <li>민감도는 투자 시점부터 재계산한 가상 시나리오</li>
+          <li>매년 1/1 약정금 균등 Call(누적 Call = 약정), gIRR로 성장, MoIC 달성일 회수</li>
+          <li>집행기간 관리보수 2%는 당해 Call에서 충당(투자금 = Call − 보수), 집행기간 후 1%는 회수금에서 차감(미지급분 NAV 차감)</li>
+          <li>성과보수 = (회수액 − 투자금) × 20%, XXX 보수 없음. 민감도는 투자 시점부터 재계산한 가상 시나리오</li>
         </ul>
       </div>
     </div>

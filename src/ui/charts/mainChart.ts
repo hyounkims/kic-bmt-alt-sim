@@ -257,7 +257,8 @@ export function bindChartTooltip(container: HTMLElement, series: readonly Series
         <tr><th><i class="sw sw-call"></i>누적 Capital Call</th><td>${money(p.cumCall)}</td></tr>
         <tr><th><i class="sw sw-dist"></i>누적 Distribution</th><td>${money(p.cumDist)}</td></tr>
         <tr class="sub"><th>당해 투자 Call</th><td>${money(p.callInvest)}</td></tr>
-        <tr class="sub"><th>당해 관리보수</th><td>${money(p.callFee)}</td></tr>
+        <tr class="sub"><th>당해 관리보수 Call</th><td>${money(p.callFee)}</td></tr>
+        <tr class="sub"><th>당해 보수 차감</th><td>${money(p.feeNetted)}</td></tr>
         <tr class="sub"><th>당해 Distribution</th><td>${money(p.dist)}</td></tr>
         ${(() => {
           const b = baseByYear.get(year);

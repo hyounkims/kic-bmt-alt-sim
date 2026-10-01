@@ -245,17 +245,17 @@ function renderYearTable(view: ScopedView, out: SimOutput): string {
     .map(
       (p) => `<tr class="phase-row-${p.phase}">
         <td>${p.year}</td><td><span class="phase phase-${p.phase}">${PHASE_LABEL[p.phase]}</span></td>
-        <td>${money(p.callInvest)}</td><td>${money(p.callFee)}</td><td>${money(p.dist)}</td>
+        <td>${money(p.callInvest)}</td><td>${money(p.callFee)}</td><td>${money(p.feeNetted)}</td><td>${money(p.dist)}</td>
         <td>${money(p.nav)}</td><td>${money(p.cumCall)}</td><td>${money(p.cumDist)}</td>
       </tr>`,
     )
     .join('');
   const note = view.startYear > out.meta.calcStart ? `<p class="table-note">누적값은 ${out.meta.calcStart}년(최초 약정)부터 누적</p>` : '';
   return `<section class="tab-content">
-    <p class="table-note">단위 $mn</p>
+    <p class="table-note">단위 $mn · 관리보수 Call = 집행기간 2%(매년 Call에 포함) · 보수 차감 = 집행기간 이후 1%를 회수금에서 뺀 금액 · Distribution은 차감 후</p>
     ${note}
     <div class="table-wrap"><table class="data-table year-table">
-      <thead><tr><th>연도</th><th>구분</th><th>투자 Call</th><th>관리보수</th><th>Distribution</th><th>연말 NAV</th><th>누적 Call</th><th>누적 Distribution</th></tr></thead>
+      <thead><tr><th>연도</th><th>구분</th><th>투자 Call</th><th>관리보수 Call</th><th>보수 차감</th><th>Distribution</th><th>연말 NAV</th><th>누적 Call</th><th>누적 Distribution</th></tr></thead>
       <tbody>${rows}</tbody>
     </table></div>
   </section>`;
@@ -276,7 +276,7 @@ function renderTrancheTable(view: ScopedView, out: SimOutput, base: SimOutput | 
         <td>${withBase(t.irr, bt?.irr, pct)}</td><td>${withBase(t.moic, bt?.moic, multiple)}</td>
         <td class="tstar">${withBase(t.tStar, bt?.tStar, (v) => v.toFixed(2))}</td>
         <td class="exit-time">${exitLabel(t.exitQuarter, t.reachDate)}${bt && bt.reachDate !== t.reachDate ? ` <span class="was">(${exitLabel(bt.exitQuarter, bt.reachDate, true)})</span>` : ''}</td><td>${withBase(t.exitYear, bt?.exitYear, String)}</td>
-        <td>${money(t.exitGross)}</td><td>${money(t.carry)}</td><td>${money(t.exitNet)}</td>
+        <td>${money(t.exitGross)}</td><td>${money(t.carry)}</td><td>${money(t.feeNetted)}</td><td>${money(t.exitNet)}</td>
         <td>${done ? '회수 완료' : '보유'}</td>
       </tr>`;
     })
@@ -284,7 +284,7 @@ function renderTrancheTable(view: ScopedView, out: SimOutput, base: SimOutput | 
   return `<section class="tab-content">
     <p class="table-note">단위 $mn${base ? ' · 괄호는 기본 가정' : ''}</p>
     <div class="table-wrap"><table class="data-table tranche-table">
-      <thead><tr><th>펀드</th><th>투자 연도</th><th>집행액</th><th>IRR</th><th>MoIC</th><th>t* (년)</th><th>회수 분기 (회수일)</th><th>회수 연도</th><th>회수 총액</th><th>성과보수</th><th>순회수</th><th>기준일 상태</th></tr></thead>
+      <thead><tr><th>펀드</th><th>투자 연도</th><th>집행액</th><th>IRR</th><th>MoIC</th><th>t* (년)</th><th>회수 분기 (회수일)</th><th>회수 연도</th><th>회수 총액</th><th>성과보수</th><th>보수 차감</th><th>Distribution</th><th>기준일 상태</th></tr></thead>
       <tbody>${rows}</tbody>
     </table></div>
   </section>`;
@@ -326,10 +326,12 @@ function renderAssumptions(): string {
     ['집행', '약정금을 집행기간 동안 매년 균등 집행. XXX(직접투자)는 2024년 1월 1일 전액 집행 (가정 2·6)'],
     ['가치 상승', '집행분 가치 = 집행액 × (1 + gIRR)^(경과 연수) (가정 3)'],
     ['회수', 't* = ln(MoIC) / ln(1 + IRR). MoIC 달성 시점(투자 연도 + t*)에 집행액 × MoIC를 회수(가정 4). 괄호의 회수일이 그 날짜이며, 보고·집계·실현 판정은 그 날이 속한 분기(운용사 분기 보고 기준). Net IRR도 실제 회수일로 계산'],
-    ['관리보수', '약정액 기준, 집행기간 2%, 이후 1%. Vintage부터 해당 펀드 마지막 회수 연도까지 매년 1월 1일. 약정 안에서 충당: 투자금 = 약정 − 총보수를 집행기간 동안 균등 투자, 펀드 누적 Call = 약정 (가정 5)'],
-    ['성과보수', '회수 시점에 (회수 총액 − 원금) × 20%. 허들·캐치업 없음. 직접투자는 보수 없음 (가정 5)'],
-    ['Distribution', '회수 총액 − 성과보수'],
-    ['NAV', 'Gross: 미회수 집행분 평가가치 합. Net 옵션: 미실현 이익 × 20% 차감, 직접투자 제외'],
+    ['Capital Call', '매년 1월 1일 약정금의 1/n(4년이면 25%)씩 균등 Call, 누적 Call = 약정. 약정 외 추가 납입 없음 (가정 1·2)'],
+    ['관리보수 (집행기간)', '약정액의 2%를 당해 Call에서 충당: 투자금 = Call − 보수 (예: AAA VII 75 − 6 = 69) (가정 5)'],
+    ['관리보수 (집행기간 이후)', '약정액의 1%가 기간에 비례해 쌓이고, 회수할 때마다 그 회수 분기 말까지의 미지급분을 회수금에서 차감. 마지막 회수 분기 말에 정산, 미지급분은 Net NAV에서 차감. 제안사 해석: 집행기간에 약정 100%가 Call되어 남은 약정이 없으므로 분배금에서 차감(실무상 LPA가 GP에 허용하는 방식)'],
+    ['성과보수', '회수 시점에 (회수 총액 − 투자금) × 20%. 허들·캐치업 없음. 직접투자는 보수 없음 (가정 5)'],
+    ['Distribution', '회수 총액 − 성과보수 − 집행기간 이후 관리보수 차감'],
+    ['NAV', 'Gross: 미회수 집행분 평가가치 합. Net 옵션: 미실현 이익 × 20%와 집행기간 이후 관리보수 미지급분 차감, 직접투자 제외'],
     ['누적 기준', '2015년(DDD VI 약정)부터 누적, 표시는 2017년부터 (가정 9)'],
     ['시간축', 'NAV는 연말 값 막대, 누적 Call·Distribution은 실제 발생일(1월 1일·회수일)의 계단형 선'],
     ['실현/추정', '기준 분기말까지 실현(채움·실선), 이후 추정(빗금·점선). 기준일 기본값은 2026-09-30 = 2026 Q3 말(원문 "2026년 9월"), 인쇄본도 화면 기준일을 따름'],
