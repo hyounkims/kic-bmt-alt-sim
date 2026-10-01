@@ -6,17 +6,18 @@ import { presetScenario, runScenarios, SCENARIO_PRESETS, stepAvailability, summa
 import { simulate } from '../engine/simulate';
 import { isValidIsoDate } from '../engine/time';
 import type { QIndex } from '../engine/time';
-import { ASSET_CLASSES, type AssetClass, type KpiPoint, type Options, type Portfolio, type Scenario, type SimError, type SimInput, type SimOutput, type Tranche } from '../engine/types';
+import { ASSET_CLASSES, type AssetClass, type KpiPoint, type Options, type Performance, type Portfolio, type Scenario, type SimError, type SimInput, type SimOutput, type Tranche } from '../engine/types';
 import { bindChartTooltip, renderMainChart } from './charts/mainChart';
 import { renderSensitivity, sameShift, stepLabel, type Availability, type Settings } from './controls/sensitivity';
-import { escapeHtml, money, multiple, pct, PHASE_LABEL, quarterLabel, signedQuarters } from './format';
+import { escapeHtml, money, multiple, pct, pct2, PHASE_LABEL, quarterLabel, signedQuarters } from './format';
 import { renderPrintView } from './print/printView';
 import { CLASS_LABEL, parseScopeKey, scopeKey, selectScope, type Scope, type ScopedView } from './scope';
 
 /** 결과 표 탭 (10.1 v0.8) */
-export type TabKey = 'scenarios' | 'years' | 'tranches' | 'assumptions';
+export type TabKey = 'scenarios' | 'performance' | 'years' | 'tranches' | 'assumptions';
 const TABS: readonly [TabKey, string][] = [
   ['scenarios', '시나리오 비교'],
+  ['performance', '펀드별 성과'],
   ['years', '연도별 현금흐름'],
   ['tranches', '집행분 상세'],
   ['assumptions', '가정 명세'],
@@ -125,9 +126,52 @@ function renderControls(out: SimOutput, state: ViewState): string {
 }
 
 const signedMoney = (v: number) => `${v >= 0 ? '+' : '−'}${money(Math.abs(v))}`;
+const signedPctPoint = (v: number) => `${v >= 0 ? '+' : '−'}${(Math.abs(v) * 100).toFixed(2)}%p`;
+
+/** 예상 최종 Net IRR·MoIC 카드 (7.8 v0.9): 기준일이 아니라 완전 회수 시점 기준 */
+function perfCard(p: Performance, base: Performance | null): string {
+  const d = base && base.netIrr !== null && p.netIrr !== null && Math.abs(p.netIrr - base.netIrr) > 5e-6
+    ? `<div class="kpi-delta">기본 ${pct2(base.netIrr)} · <strong>${signedPctPoint(p.netIrr - base.netIrr)}</strong></div>`
+    : '';
+  const exit = p.lastExitQuarter === null ? '' : ` · ${quarterLabel(p.lastExitQuarter)} 회수 완료`;
+  return `<div class="kpi-card kpi-perf"><div class="kpi-label">예상 최종 Net IRR</div><div class="kpi-value">${pct2(p.netIrr)}</div>${d}<div class="kpi-note">Net MoIC ${multiple(p.netMoic)}${exit}</div></div>`;
+}
+
+/** 펀드별 성과 탭 (7.8 v0.9): 전체·자산군·펀드의 예상 최종 Net IRR·MoIC */
+function renderPerformanceTable(out: SimOutput, base: SimOutput | null, state: ViewState): string {
+  const cur = scopeKey(state.scope);
+  const withBase = (v: number | null, b: number | null | undefined, fmt: (x: number | null) => string) =>
+    base && b !== undefined && v !== null && b !== null && Math.abs(v - b) > 5e-6 ? `${fmt(v)} <span class="was">(${fmt(b)})</span>` : fmt(v);
+  const row = (key: string, label: string, p: Performance, bp: Performance | undefined, commitment: number, gross: string, cls: string) => `
+    <tr class="${cls}${key === cur ? ' current-scope' : ''}">
+      <td>${label}</td><td>${money(commitment)}</td><td>${money(p.totalCall)}</td><td>${money(p.totalDist)}</td>
+      <td>${p.lastExitQuarter === null ? '—' : quarterLabel(p.lastExitQuarter)}</td>${gross}
+      <td class="net">${withBase(p.netIrr, bp?.netIrr, pct2)}</td><td class="net">${withBase(p.netMoic, bp?.netMoic, (x) => multiple(x ?? 0))}</td>
+    </tr>`;
+  const noGross = '<td>—</td><td>—</td>';
+  const total = out.funds.reduce((s, f) => s + f.commitment, 0);
+  const rows: string[] = [row('total', '<strong>대체 포트폴리오 전체</strong>', out.performance.total, base?.performance.total, total, noGross, 'perf-total')];
+  for (const c of ASSET_CLASSES) {
+    const funds = out.funds.filter((f) => f.assetClass === c);
+    if (funds.length === 0) continue;
+    rows.push(row(`class:${c}`, `<strong>${escapeHtml(CLASS_LABEL[c])}</strong>`, out.performance.byClass[c], base?.performance.byClass[c], funds.reduce((s, f) => s + f.commitment, 0), noGross, 'perf-class'));
+    for (const f of funds) {
+      const p = out.performance.byFund[f.id];
+      if (!p) continue;
+      rows.push(row(`fund:${f.id}`, `<span class="perf-fund">${escapeHtml(f.name)}${f.type === 'direct' ? ' (직접투자)' : ''}</span>`, p, base?.performance.byFund[f.id], f.commitment, `<td>${pct(f.irr)}</td><td>${multiple(f.moic)}</td>`, 'perf-fund-row'));
+    }
+  }
+  return `<section class="tab-content">
+    <p class="table-note">완전 회수 시점 기준 예상 성과 · Net = 관리보수·성과보수 차감 후 LP 기준 · Gross = 적용 가정 · 단위 $mn${base ? ' · 괄호는 기본 가정' : ''}</p>
+    <div class="table-wrap"><table class="data-table perf-table">
+      <thead><tr><th>구분</th><th>약정</th><th>총 Call</th><th>총 Distribution</th><th>최종 회수</th><th>Gross IRR</th><th>Gross MoIC</th><th>예상 Net IRR</th><th>예상 Net MoIC</th></tr></thead>
+      <tbody>${rows.join('')}</tbody>
+    </table></div>
+  </section>`;
+}
 const signedMultiple = (v: number) => `${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(2)}x`;
 
-function renderKpi(view: ScopedView, out: SimOutput, baseKpi: KpiPoint | null, navLabel: string): string {
+function renderKpi(view: ScopedView, out: SimOutput, baseKpi: KpiPoint | null, navLabel: string, basePerf: Performance | null): string {
   const k = view.kpi;
   const delta = (cur: number, base: number | undefined, fmt: (v: number) => string, fmtDelta: (v: number) => string) =>
     base === undefined || Math.abs(cur - base) < 5e-4 ? '' : `<div class="kpi-delta">기본 ${fmt(base)} · <strong>${fmtDelta(cur - base)}</strong></div>`;
@@ -147,6 +191,7 @@ function renderKpi(view: ScopedView, out: SimOutput, baseKpi: KpiPoint | null, n
       ${card('누적 Distribution', money(k.cumDist), '$mn · 순회수', delta(k.cumDist, b?.cumDist, money, signedMoney))}
       ${card('DPI', multiple(k.dpi), 'Distribution ÷ Call', delta(k.dpi, b?.dpi, multiple, signedMultiple))}
       ${card('TVPI', multiple(k.tvpi), '(Dist + NAV) ÷ Call', delta(k.tvpi, b?.tvpi, multiple, signedMultiple))}
+      ${perfCard(view.performance, basePerf)}
     </div>
     <p class="kpi-caption">기준일 ${escapeHtml(out.meta.asOf)} · 실현 기준 ${quarterLabel(out.meta.asOfQuarter)} 말 · 진행 연도 ${out.meta.asOfYear}${baseKpi ? ' · 회색 글씨는 기본 가정 대비' : ''}</p>
   </section>`;
@@ -226,8 +271,9 @@ function renderScenarioTable(c: Computed, state: ViewState): string {
       const cells = r.errors.length === 0
         ? `<td>${r.endYear}</td><td>${quarterLabel(r.lastExitQuarter)}</td><td>${money(r.finalCumCall)}</td><td>${money(r.finalCumDist)}</td>
            <td class="delta">${r.vsBase ? signedQuarters(r.vsBase.lastExitQuarters) : '—'}</td><td class="delta">${r.vsBase ? signedMoney(r.vsBase.finalCumDist) : '—'}</td>
+           <td>${pct2(r.netIrr)}</td><td>${multiple(r.netMoic)}</td>
            <td>${multiple(r.tvpi)}</td>`
-        : `<td colspan="7" class="muted">${escapeHtml(r.errors.join(', '))}</td>`;
+        : `<td colspan="9" class="muted">${escapeHtml(r.errors.join(', '))}</td>`;
       return `<tr class="${applied ? 'applied' : ''}${preset.key === 'base' ? ' is-base' : ''}">
         <td>${escapeHtml(label(preset.irrShift, preset.moicShift))}</td>${cells}
         <td><button type="button" class="text-btn" data-preset="${preset.key}"${applied ? ' disabled' : ''}>${applied ? '적용 중' : '전 자산군 적용'}</button></td>
@@ -237,7 +283,7 @@ function renderScenarioTable(c: Computed, state: ViewState): string {
   return `<section class="tab-content">
     <p class="table-note">전 자산군 동시 적용 (8장, 3.3-A) · 해석 설정이 기본이면 인쇄본과 같은 수치 · 최대 종료 연도 ${c.scenarios.maxEndYear} · 단위 $mn</p>
     <div class="table-wrap"><table class="data-table scenario-table">
-      <thead><tr><th>시나리오</th><th>종료 연도</th><th>마지막 회수 분기</th><th>최종 누적 Call</th><th>최종 누적 Distribution</th><th>Δ 마지막 회수</th><th>Δ Distribution</th><th>기준일 TVPI</th><th></th></tr></thead>
+      <thead><tr><th>시나리오</th><th>종료 연도</th><th>마지막 회수 분기</th><th>최종 누적 Call</th><th>최종 누적 Distribution</th><th>Δ 마지막 회수</th><th>Δ Distribution</th><th>예상 Net IRR</th><th>예상 Net MoIC</th><th>기준일 TVPI</th><th></th></tr></thead>
       <tbody>${rows}</tbody>
     </table></div>
   </section>`;
@@ -297,6 +343,7 @@ export function renderDashboard(c: Computed, state: ViewState): string {
   const chartOpts = baseView ? { idPrefix: 'main', xEndYear, baseline: baseView.steps } : { idPrefix: 'main', xEndYear };
   const tabBody: Record<TabKey, string> = {
     scenarios: renderScenarioTable(c, state),
+    performance: renderPerformanceTable(out, base, state),
     years: renderYearTable(view, out),
     tranches: renderTrancheTable(view, out, base),
     assumptions: renderAssumptions(),
@@ -309,7 +356,7 @@ export function renderDashboard(c: Computed, state: ViewState): string {
     </aside>
     <main class="main">
       ${renderGuide()}
-      ${renderKpi(view, out, baseView?.kpi ?? null, state.settings.navBasis === 'gross' ? 'Gross' : 'Net')}
+      ${renderKpi(view, out, baseView?.kpi ?? null, state.settings.navBasis === 'gross' ? 'Gross' : 'Net', baseView?.performance ?? null)}
       <section class="chart-panel">
         <div class="eyebrow">Cash Flow &amp; NAV</div>
         <h2>${escapeHtml(view.title)} <span class="muted">${view.startYear}~${xEndYear} · 연말 NAV / 누적 Capital Call / 누적 Distribution${baseView ? ' · 회색 = 기본 가정' : ''}</span></h2>

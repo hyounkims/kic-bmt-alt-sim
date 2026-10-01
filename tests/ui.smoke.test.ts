@@ -28,8 +28,8 @@ describe('기본 대시보드 (전체, 기준일 2026-09-30)', () => {
     root = mount();
   });
 
-  it('KPI 카드 5개', () => {
-    expect(root.querySelectorAll('.kpi-card')).toHaveLength(5);
+  it('KPI 카드 6개 (예상 최종 Net IRR 포함, v0.9)', () => {
+    expect(root.querySelectorAll('.kpi-card')).toHaveLength(6);
     // v0.7: 기준일 NAV와 연말 NAV 구분
     expect([...root.querySelectorAll('.kpi-label')].map((l) => l.textContent)).toContain('기준일 NAV');
     expect(root.querySelector('.year-table thead')?.textContent).toContain('연말 NAV');
@@ -225,5 +225,25 @@ describe('민감도 조정 (M4)', () => {
     expect(engine).toBe(3);
     expect(deltas[0]).toBe('+3분기');
     expect([...root.querySelectorAll('.scenario-table tbody tr')][0]?.querySelector('td.delta')?.textContent).toBe('—');
+  });
+
+  it('M9: 펀드별 성과 탭 — AAA VII 예상 Net IRR 11.81%·MoIC 1.58x, 전체 Call 3,000 (11.1)', () => {
+    click(root, 'button[data-tab="performance"]');
+    expect(root.querySelector<HTMLElement>('[data-tab-panel="performance"]')?.hidden).toBe(false);
+    // 다시 그리면 DOM이 바뀌므로 매번 새로 찾는다
+    const rowOf = (label: string) => [...root.querySelectorAll('[data-tab-panel="performance"] .perf-table tbody tr')].find((tr) => tr.querySelector('td')?.textContent?.trim() === label);
+    const aaa = [...(rowOf('AAA VII')?.querySelectorAll('td.net') ?? [])].map((td) => td.textContent);
+    expect(aaa).toEqual(['11.81%', '1.58x']);
+    expect(rowOf('대체 포트폴리오 전체')?.querySelectorAll('td')[2]?.textContent).toBe('3,000.0');
+    expect(rowOf('XXX (직접투자)')?.querySelector('td.net')?.textContent).toBe('29.93%');
+    // 민감도를 바꾸면 괄호에 기본값
+    click(root, shiftBtn('PE', 'irr', -0.03));
+    expect(rowOf('AAA VII')?.querySelector('td.net')?.textContent).toContain('(11.81%)');
+  });
+
+  it('M9: 대표 영역에 예상 최종 Net IRR 카드', () => {
+    const perf = root.querySelector('.kpi-perf');
+    expect(perf?.querySelector('.kpi-label')?.textContent).toBe('예상 최종 Net IRR');
+    expect(perf?.querySelector('.kpi-note')?.textContent).toContain('2032 Q1 회수 완료');
   });
 });

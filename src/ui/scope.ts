@@ -1,6 +1,6 @@
 // 보기 범위 (10.1): 전체 / 자산군 / 펀드. 출력 객체에서 해당 범위 데이터를 고른다 (계산 없음).
 
-import type { AssetClass, FundInfo, KpiPoint, ScopeRef, SeriesPoint, SimOutput, StepPoint, Tranche } from '../engine/types';
+import type { AssetClass, FundInfo, KpiPoint, Performance, ScopeRef, SeriesPoint, SimOutput, StepPoint, Tranche } from '../engine/types';
 
 /** 엔진의 보기 범위 타입과 같음 (8장 summarizeScenarios와 공유) */
 export type Scope = ScopeRef;
@@ -36,12 +36,14 @@ export interface ScopedView {
   readonly endYear: number;
   /** 범위 내 마지막 회수 시각 (엔진 lastExit, 9장 v0.6) */
   readonly lastExitTime: number;
+  /** 예상 최종 성과 (7.8 v0.9) */
+  readonly performance: Performance;
 }
 
 export function selectScope(out: SimOutput, scope: Scope): ScopedView | null {
   const start = out.meta.displayStart;
   if (scope.kind === 'total') {
-    return { title: '대체 포트폴리오 전체', series: out.series.total, steps: out.steps.total, kpi: out.kpi.total, funds: out.funds, tranches: out.tranches, startYear: start, endYear: out.meta.endYear, lastExitTime: out.lastExit.total };
+    return { title: '대체 포트폴리오 전체', series: out.series.total, steps: out.steps.total, kpi: out.kpi.total, funds: out.funds, tranches: out.tranches, startYear: start, endYear: out.meta.endYear, lastExitTime: out.lastExit.total, performance: out.performance.total };
   }
   if (scope.kind === 'class') {
     const funds = out.funds.filter((f) => f.assetClass === scope.id);
@@ -56,6 +58,7 @@ export function selectScope(out: SimOutput, scope: Scope): ScopedView | null {
       startYear: start,
       endYear: Math.max(start, ...funds.map((f) => f.lastExitYear)),
       lastExitTime: out.lastExit.byClass[scope.id],
+      performance: out.performance.byClass[scope.id],
     };
   }
   const fund = out.funds.find((f) => f.id === scope.id);
@@ -63,7 +66,8 @@ export function selectScope(out: SimOutput, scope: Scope): ScopedView | null {
   const steps = out.steps.byFund[scope.id];
   const kpi = out.kpi.byFund[scope.id];
   const lastExitTime = out.lastExit.byFund[scope.id];
-  if (!fund || !series || !steps || !kpi || lastExitTime === undefined) return null;
+  const performance = out.performance.byFund[scope.id];
+  if (!fund || !series || !steps || !kpi || lastExitTime === undefined || !performance) return null;
   return {
     title: `${fund.name} (${fund.assetClass}${fund.type === 'direct' ? ' · 직접투자' : ''})`,
     series,
@@ -74,5 +78,6 @@ export function selectScope(out: SimOutput, scope: Scope): ScopedView | null {
     startYear: Math.max(start, fund.vintage),
     endYear: fund.lastExitYear,
     lastExitTime,
+    performance,
   };
 }

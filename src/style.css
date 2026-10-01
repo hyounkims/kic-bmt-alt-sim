@@ -170,7 +170,7 @@ h2 { font-size: 16px; margin: 0 0 10px; font-weight: 700; letter-spacing: -0.01e
 .hero-figure { display: flex; align-items: baseline; gap: 8px; }
 .kpi-hero .kpi-value { font-size: 64px; font-weight: 700; color: var(--kic-blue); letter-spacing: -0.01em; line-height: 1; }
 .hero-unit { font-size: 20px; font-weight: 700; color: var(--ink); }
-.kpi-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; }
+.kpi-stats { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0; }
 .kpi-stats .kpi-card { padding: 0 14px; border-left: 1px solid var(--rule-soft); }
 .kpi-caption { grid-column: 1 / -1; margin: 4px 0 0; font-size: 11px; color: var(--text-muted); }
 .kpi-delta { font-family: var(--font-num); font-size: 12px; color: var(--text-muted); font-variant-numeric: tabular-nums; margin-top: 2px; }
@@ -279,6 +279,15 @@ h2 { font-size: 16px; margin: 0 0 10px; font-weight: 700; letter-spacing: -0.01e
 .scenario-table tr.is-base td { background: #f7f8fa; }
 .scenario-table td.delta { color: var(--kic-navy); }
 .scenario-table td:last-child { text-align: center; }
+
+/* 펀드별 성과 (v0.9) */
+.perf-table tr.perf-total td { font-weight: 700; background: #f7f8fa; }
+.perf-table tr.perf-class td { font-weight: 700; border-top: 1px solid var(--rule); }
+.perf-table .perf-fund { padding-left: 14px; display: inline-block; }
+.perf-table td.net { color: var(--kic-navy); font-weight: 700; }
+.perf-table tr.current-scope td { background: #f0f6fd; }
+.kpi-perf .kpi-value { color: var(--kic-navy); }
+.print-summary td.net { font-weight: 700; }
 
 /* 가정 명세 (탭 안) */
 .assumptions dl { display: grid; grid-template-columns: 120px 1fr; gap: 8px 16px; margin: 0; font-size: 13px; }

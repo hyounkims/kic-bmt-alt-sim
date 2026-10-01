@@ -14,6 +14,9 @@ export const multiple = (v: number): string => `${v.toFixed(2)}x`;
 /** 비율: 0.18 → 18.0% */
 export const pct = (v: number): string => `${(v * 100).toFixed(1)}%`;
 
+/** 비율 소수 둘째 자리: 0.1181 → 11.81% (Net IRR) */
+export const pct2 = (v: number | null): string => (v === null ? '—' : `${(v * 100).toFixed(2)}%`);
+
 /** 연 소수 시각: 2024.19 */
 export const yearTime = (v: number): string => v.toFixed(2);
 
