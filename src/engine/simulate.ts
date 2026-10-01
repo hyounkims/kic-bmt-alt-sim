@@ -2,6 +2,7 @@
 
 import { kpiOf, seriesOf, sortEvents, stepsOf, trancheEvents, type AggregateContext, type FundCalc } from './aggregate';
 import { feeEvents } from './fees';
+import { performanceOf } from './performance';
 import { adjustAssumptions, buildTranches } from './tranches';
 import { asOfQuarterOf, qEndTime, qYear, startOf, type QIndex, type Year, type YearTime } from './time';
 import {
@@ -10,6 +11,7 @@ import {
   type ByClass,
   type FundInfo,
   type KpiPoint,
+  type Performance,
   type Scoped,
   type SimError,
   type SimInput,
@@ -26,6 +28,7 @@ function scoped<T>(fcs: readonly FundCalc[], f: (group: readonly FundCalc[]) => 
 }
 
 const ZERO_KPI: KpiPoint = { cumCall: 0, cumDist: 0, nav: 0, dpi: 0, tvpi: 0 };
+const EMPTY_PERF: Performance = { netIrr: null, netMoic: 0, totalCall: 0, totalDist: 0, lastExitQuarter: null };
 
 function emptyByClass<T>(value: () => T): ByClass<T> {
   return Object.fromEntries(ASSET_CLASSES.map((c: AssetClass) => [c, value()])) as ByClass<T>;
@@ -43,6 +46,7 @@ function errorOutput(input: SimInput, errors: readonly SimError[]): SimOutput {
     steps: { total: [], byClass: emptyByClass(() => []), byFund: {} },
     kpi: { total: ZERO_KPI, byClass: emptyByClass(() => ZERO_KPI), byFund: {} },
     lastExit: { total: startOf(calcStart), byClass: emptyByClass(() => startOf(calcStart)), byFund: {} },
+    performance: { total: EMPTY_PERF, byClass: emptyByClass(() => EMPTY_PERF), byFund: {} },
     errors,
   };
 }
@@ -111,6 +115,7 @@ export function simulate(input: SimInput): SimOutput {
     steps: scoped(fundCalcs, (g) => stepsOf(g, ctx)),
     kpi: scoped(fundCalcs, (g) => kpiOf(g, ctx)),
     lastExit: scoped(fundCalcs, (g) => Math.max(options.calcStart, ...g.flatMap((fc) => fc.tranches.map((t) => t.exitTime))) as YearTime),
+    performance: scoped(fundCalcs, (g) => performanceOf(g)),
     errors: [],
   };
 }

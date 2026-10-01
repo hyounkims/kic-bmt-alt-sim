@@ -51,6 +51,9 @@ describe('11.3 변환 관계', () => {
         });
         for (const f of ['cumCall', 'cumDist', 'nav'] as const) near(b.kpi.total[f], a.kpi.total[f] * k, tol, `KPI ${f}`);
         for (const f of ['dpi', 'tvpi'] as const) near(b.kpi.total[f], a.kpi.total[f], 1e-9, `KPI ${f}`);
+        // 7.8: Net IRR·MoIC는 규모와 무관
+        near(b.performance.total.netMoic, a.performance.total.netMoic, 1e-9, 'Net MoIC');
+        if (a.performance.total.netIrr !== null) near(b.performance.total.netIrr ?? Number.NaN, a.performance.total.netIrr, 1e-7, 'Net IRR');
       }),
       { numRuns: 200 },
     );

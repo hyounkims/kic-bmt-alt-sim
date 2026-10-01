@@ -180,6 +180,18 @@ export interface Scoped<T> {
   readonly byFund: Readonly<Record<string, T>>;
 }
 
+/** 예상 최종 성과 (7.8 v0.9): LP 순현금흐름 기준 */
+export interface Performance {
+  /** Net IRR (해가 없으면 null) */
+  readonly netIrr: number | null;
+  /** Net MoIC = 총 Distribution / 총 Call */
+  readonly netMoic: number;
+  readonly totalCall: number;
+  readonly totalDist: number;
+  /** 최종 회수 분기 (집행분이 없으면 null) */
+  readonly lastExitQuarter: QIndex | null;
+}
+
 export interface SimError {
   readonly code: string;
   readonly message: string;
@@ -197,5 +209,7 @@ export interface SimOutput {
   readonly kpi: Scoped<KpiPoint>;
   /** 범위별 마지막 회수 시각 (9장 v0.6) */
   readonly lastExit: Scoped<YearTime>;
+  /** 범위별 예상 최종 성과 (7.8 v0.9) */
+  readonly performance: Scoped<Performance>;
   readonly errors: readonly SimError[];
 }

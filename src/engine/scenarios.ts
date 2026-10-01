@@ -62,6 +62,9 @@ export interface ScenarioSummaryRow {
   readonly finalCumDist: number;
   /** 기준일 TVPI */
   readonly tvpi: number;
+  /** 예상 최종 Net IRR·MoIC (7.8 v0.9) */
+  readonly netIrr: number | null;
+  readonly netMoic: number;
   /** 기본 시나리오 대비 차이 (기본 행이거나 기본 결과가 없으면 null) */
   readonly vsBase: {
     readonly endYear: number;
@@ -70,6 +73,8 @@ export interface ScenarioSummaryRow {
     readonly lastExitQuarters: number;
     readonly finalCumCall: number;
     readonly finalCumDist: number;
+    readonly netIrr: number | null;
+    readonly netMoic: number;
   } | null;
 }
 
@@ -80,6 +85,8 @@ interface ScopeFigures {
   finalCumCall: number;
   finalCumDist: number;
   tvpi: number;
+  netIrr: number | null;
+  netMoic: number;
 }
 
 function figuresOf(out: SimOutput, scope: ScopeRef): ScopeFigures | null {
@@ -89,7 +96,8 @@ function figuresOf(out: SimOutput, scope: ScopeRef): ScopeFigures | null {
   const series = pick(out.series);
   const kpi = pick(out.kpi);
   const lastExitTime = pick(out.lastExit);
-  if (!series || !kpi || lastExitTime === undefined) return null;
+  const perf = pick(out.performance);
+  if (!series || !kpi || lastExitTime === undefined || !perf) return null;
   const funds = scope.kind === 'total' ? out.funds : out.funds.filter((f) => (scope.kind === 'class' ? f.assetClass === scope.id : f.id === scope.id));
   if (funds.length === 0) return null;
   const last = series[series.length - 1];
@@ -101,6 +109,8 @@ function figuresOf(out: SimOutput, scope: ScopeRef): ScopeFigures | null {
     finalCumCall: last?.cumCall ?? 0,
     finalCumDist: last?.cumDist ?? 0,
     tvpi: kpi.tvpi,
+    netIrr: perf.netIrr,
+    netMoic: perf.netMoic,
   };
 }
 
@@ -111,7 +121,7 @@ export function summarizeScenarios(runs: ScenarioRuns, scope: ScopeRef): Scenari
   return runs.runs.map(({ preset, output }) => {
     const fig = figuresOf(output, scope);
     const errors = output.errors.length > 0 ? output.errors.map((e) => e.message) : fig ? [] : ['범위 없음'];
-    const f = fig ?? { endYear: 0 as Year, lastExitTime: 0 as YearTime, lastExitQuarter: 0 as QIndex, finalCumCall: 0, finalCumDist: 0, tvpi: 0 };
+    const f = fig ?? { endYear: 0 as Year, lastExitTime: 0 as YearTime, lastExitQuarter: 0 as QIndex, finalCumCall: 0, finalCumDist: 0, tvpi: 0, netIrr: null, netMoic: 0 };
     return {
       preset,
       errors,
@@ -124,6 +134,8 @@ export function summarizeScenarios(runs: ScenarioRuns, scope: ScopeRef): Scenari
               lastExitQuarters: fig.lastExitQuarter - baseFig.lastExitQuarter,
               finalCumCall: fig.finalCumCall - baseFig.finalCumCall,
               finalCumDist: fig.finalCumDist - baseFig.finalCumDist,
+              netIrr: fig.netIrr !== null && baseFig.netIrr !== null ? fig.netIrr - baseFig.netIrr : null,
+              netMoic: fig.netMoic - baseFig.netMoic,
             }
           : null,
     };

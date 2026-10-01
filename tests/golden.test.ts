@@ -75,6 +75,14 @@ describe('11.1 정답 케이스 (v0.9)', () => {
       }
     });
 
+    it('예상 최종 Net MoIC 1.58x (475.2 / 300) / Net IRR 11.81% (7.8, 독립 계산)', () => {
+      const perf = base.performance.byFund['AAA_VII'];
+      expectExact(perf?.netMoic, 475.2 / 300, 'Net MoIC');
+      expectDisplay(perf?.netMoic, 1.58, 'Net MoIC 표시값');
+      // 표시값 11.81% → 소수 0.1181 ± 0.0001 (CLAUDE.md 표시값 허용 오차를 % 단위로)
+      expect(Math.abs((perf?.netIrr ?? Number.NaN) - 0.1181)).toBeLessThanOrEqual(0.0001);
+    });
+
     it('누적 Distribution 475.2, 누적 Capital Call 300 (= 약정)', () => {
       expectExact(last?.cumDist, 475.2, '최종 누적 Distribution');
       expectExact(last?.cumCall, 300, '최종 누적 Capital Call');
@@ -102,6 +110,13 @@ describe('11.1 정답 케이스 (v0.9)', () => {
     it('연말 NAV 2024~2026 = 520.0 / 676.0 / 878.8', () => {
       [520, 676, 878.8].forEach((v, i) => expectDisplay(at(series, 2024 + i).nav, v, `${2024 + i} 연말 NAV`));
       expectExact(at(series, 2027).nav, 0, '2027 연말 NAV');
+    });
+
+    it('예상 최종 Net IRR 29.93% (2.5^(1/3.5) − 1) / Net MoIC 2.50x', () => {
+      const perf = base.performance.byFund['XXX'];
+      expect(Math.abs((perf?.netIrr ?? Number.NaN) - (Math.pow(2.5, 1 / 3.5) - 1))).toBeLessThan(1e-9);
+      expect(Math.abs((perf?.netIrr ?? Number.NaN) - 0.2993)).toBeLessThanOrEqual(0.0001);
+      expectExact(perf?.netMoic, 2.5, 'Net MoIC');
     });
 
     it('회수 1,000', () => {

@@ -1,3 +1,4 @@
+import { npv } from '../src/engine/performance';
 // DESIGN.md 11.2 불변 조건 검사 함수. mock 결정론 테스트와 fast-check 무작위 테스트가 공유한다.
 import { expect } from 'vitest';
 import { qOfYearStart, qYear, quarterOfReach } from '../src/engine/time';
@@ -84,6 +85,17 @@ export function checkInvariants(input: SimInput, out: SimOutput): void {
   // 모든 수치 ≥ 0
   for (const p of [...total, ...Object.values(out.series.byFund).flat()]) for (const k of FIELDS) expect(p[k], `${p.year} ${k} ≥ 0`).toBeGreaterThanOrEqual(0);
   for (const e of out.events) expect(e.amount).toBeGreaterThanOrEqual(0);
+
+  // 7.8 v0.9: Net MoIC = 총 Distribution / 총 Call, Net IRR에서 순현금흐름 NPV = 0
+  for (const perf of [out.performance.total, ...Object.values(out.performance.byFund)]) {
+    near(perf.netMoic * perf.totalCall, perf.totalDist, tol, 'Net MoIC × Call = Dist');
+  }
+  const totalPerf = out.performance.total;
+  near(totalPerf.totalCall, last?.cumCall, tol, '성과 총 Call = 최종 누적 Call');
+  if (totalPerf.netIrr !== null) {
+    const flows = out.events.map((e) => ({ time: e.time, amount: e.type === 'dist' ? e.amount : -e.amount }));
+    expect(Math.abs(npv(flows, totalPerf.netIrr)), 'NPV(Net IRR) ≈ 0').toBeLessThanOrEqual(1e-6 * Math.max(1, totalPerf.totalCall));
+  }
 
   // 계단형 누적선 최종값 = 연도별 최종 누적값
   const lastStep = out.steps.total[out.steps.total.length - 1];
