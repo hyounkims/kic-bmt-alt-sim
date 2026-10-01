@@ -75,12 +75,12 @@ export function renderSensitivity(scenario: Scenario, settings: Settings, availa
   return `<section class="side-section sens-panel" aria-label="민감도 조정">
     <div class="eyebrow">Sensitivity</div>
     <div class="sens-head">
-      <h2>민감도 조정 <span class="muted">IRR ${settings.irrShiftMode === 'pp' ? '3%p' : '3%'} · MoIC ${settings.moicShiftMode === 'relative' ? '20%' : '0.20x'} 단위 (3.3)</span></h2>
+      <h2>민감도 조정 <span class="muted">IRR ${settings.irrShiftMode === 'pp' ? '3%p' : '3%'} · MoIC ${settings.moicShiftMode === 'relative' ? '20%' : '0.20x'} 단위</span></h2>
       <button type="button" id="reset-shifts" class="text-btn"${active ? '' : ' disabled'}>기본 가정으로 초기화</button>
     </div>
     ${notice ? `<p class="notice" role="status">${escapeHtml(notice)}</p>` : ''}
     <div class="sens-grid">${rows}</div>
-    ${blocked.length ? `<details class="blocked" data-panel="blocked"><summary>비활성 단계 ${blocked.length}개 (조정 하한 3.3-C: IRR′ ≥ 1%, MoIC′ > 1.0x)</summary><ul>${blocked.join('')}</ul></details>` : ''}
+    ${blocked.length ? `<details class="blocked" data-panel="blocked"><summary>비활성 단계 ${blocked.length}개 (조정 하한: IRR′ ≥ 1%, MoIC′ > 1.0x)</summary><ul>${blocked.join('')}</ul></details>` : ''}
     ${renderSettings(settings)}
   </section>`;
 }
@@ -91,10 +91,10 @@ function renderSettings(s: Settings): string {
   return `<details class="settings" data-panel="settings">
     <summary>해석 설정</summary>
     <div class="settings-grid">
-      <label class="control"><span>IRR 조정 해석 (3.3-1·3)</span>${sel('irrShiftMode', s.irrShiftMode, [['pp', '%p 가감 (18% → 15%)'], ['relative', '상대 변동 (18% → 17.46%)']])}</label>
-      <label class="control"><span>MoIC 조정 해석 (3.3-2·3)</span>${sel('moicShiftMode', s.moicShiftMode, [['relative', '상대 변동 (2.0x → 1.6x)'], ['absolute', '절대 가감 (2.0x → 1.8x)']])}</label>
-      <label class="control"><span>NAV 기준 (3.5)</span>${sel('navBasis', s.navBasis, [['gross', 'Gross (평가가치 합)'], ['net', 'Net (미실현 이익 × 20% 차감)']])}</label>
-      <label class="check"><input type="checkbox" data-setting="applyToDirect"${s.applyToDirect ? ' checked' : ''} /> PE 조정을 XXX(직접투자)에도 적용 (3.3-4)</label>
+      <label class="control"><span>IRR 조정 해석</span>${sel('irrShiftMode', s.irrShiftMode, [['pp', '%p 가감 (18% → 15%)'], ['relative', '상대 변동 (18% → 17.46%)']])}</label>
+      <label class="control"><span>MoIC 조정 해석</span>${sel('moicShiftMode', s.moicShiftMode, [['relative', '상대 변동 (2.0x → 1.6x)'], ['absolute', '절대 가감 (2.0x → 1.8x)']])}</label>
+      <label class="control"><span>NAV 기준</span>${sel('navBasis', s.navBasis, [['gross', 'Gross (평가가치 합)'], ['net', 'Net (미실현 이익 × 20% 차감)']])}</label>
+      <label class="check"><input type="checkbox" data-setting="applyToDirect"${s.applyToDirect ? ' checked' : ''} /> PE 조정을 XXX(직접투자)에도 적용</label>
     </div>
   </details>`;
 }

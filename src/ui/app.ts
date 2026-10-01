@@ -6,6 +6,7 @@ import { presetScenario, runScenarios, SCENARIO_PRESETS, stepAvailability, summa
 import { simulate } from '../engine/simulate';
 import { isValidIsoDate } from '../engine/time';
 import { ASSET_CLASSES, type AssetClass, type KpiPoint, type Options, type Performance, type Portfolio, type Scenario, type SimError, type SimInput, type SimOutput, type Tranche } from '../engine/types';
+import { animateChart, snapshotChart } from './charts/animate';
 import { bindChartTooltip, renderMainChart } from './charts/mainChart';
 import { renderSensitivity, sameShift, stepLabel, type Availability, type Settings } from './controls/sensitivity';
 import { escapeHtml, exitLabel, money, multiple, pct, pct2, PHASE_LABEL, quarterLabel, signedQuarters } from './format';
@@ -31,11 +32,13 @@ export interface ViewState {
   tab: TabKey;
   /** 해석 변경으로 단계가 초기화된 경우 알림 (10.1 v0.4) */
   notice?: string;
+  /** 펀드별 성과 탭에서 펼친 행: 'total', 'class:PE' 등 (10.1 v0.9.3) */
+  perfOpen: readonly string[];
 }
 
 export function initialState(scope: Scope, asOf: string): ViewState {
   const { irrShiftMode, moicShiftMode, applyToDirect, navBasis } = DEFAULT_OPTIONS;
-  return { scope, asOf, scenario: ZERO_SCENARIO, settings: { irrShiftMode, moicShiftMode, applyToDirect, navBasis }, tab: 'scenarios' };
+  return { scope, asOf, scenario: ZERO_SCENARIO, settings: { irrShiftMode, moicShiftMode, applyToDirect, navBasis }, tab: 'scenarios', perfOpen: ['total'] };
 }
 
 /** 한 번의 렌더링에 필요한 엔진 결과 */
@@ -90,7 +93,7 @@ export function clampScenario(scenario: Scenario, availability: Availability, se
     }
   }
   const next = { irrShift, moicShift };
-  return reset.length ? { scenario: next, notice: `해석 변경으로 하한(3.3-C)을 위반해 0으로 되돌림: ${reset.join(', ')}` } : { scenario: next };
+  return reset.length ? { scenario: next, notice: `해석 변경으로 조정 하한을 위반해 0으로 되돌림: ${reset.join(', ')}` } : { scenario: next };
 }
 
 export function renderErrors(errors: readonly SimError[], heading = '입력 검증 오류 — 계산하지 않았습니다'): string {
@@ -127,43 +130,72 @@ function renderControls(out: SimOutput, state: ViewState): string {
 const signedMoney = (v: number) => `${v >= 0 ? '+' : '−'}${money(Math.abs(v))}`;
 const signedPctPoint = (v: number) => `${v >= 0 ? '+' : '−'}${(Math.abs(v) * 100).toFixed(2)}%p`;
 
+/** 기본 대비 2줄 (기본값 / 증감). 조정이 없어도 같은 높이의 빈 자리를 두어 아래 차트가 움직이지 않게 함 (10.1 v0.9.3) */
+function deltaBlock(baseText: string | null, diffText: string | null): string {
+  return baseText === null || diffText === null
+    ? '<div class="kpi-delta is-empty" aria-hidden="true"><span>&nbsp;</span><strong>&nbsp;</strong></div>'
+    : `<div class="kpi-delta"><span>${baseText}</span><strong>${diffText}</strong></div>`;
+}
+
 /** 예상 최종 Net IRR·MoIC 카드 (7.8 v0.9): 기준일이 아니라 완전 회수 시점 기준 */
 function perfCard(p: Performance, base: Performance | null): string {
   const d = base && base.netIrr !== null && p.netIrr !== null && Math.abs(p.netIrr - base.netIrr) > 5e-6
-    ? `<div class="kpi-delta">기본 ${pct2(base.netIrr)} · <strong>${signedPctPoint(p.netIrr - base.netIrr)}</strong></div>`
-    : '';
-  const exit = p.lastExitQuarter === null ? '' : ` · ${exitLabel(p.lastExitQuarter, p.lastReachDate)} 회수 완료`;
-  return `<div class="kpi-card kpi-perf"><div class="kpi-label">예상 최종 Net IRR</div><div class="kpi-value">${pct2(p.netIrr)}</div>${d}<div class="kpi-note">Net MoIC ${multiple(p.netMoic)}${exit}</div></div>`;
+    ? deltaBlock(`기본 ${pct2(base.netIrr)}`, signedPctPoint(p.netIrr - base.netIrr))
+    : deltaBlock(null, null);
+  const exit = p.lastExitQuarter === null ? '' : exitLabel(p.lastExitQuarter, p.lastReachDate);
+  return `<div class="kpi-card kpi-perf"><div class="kpi-label">예상 최종 Net IRR</div><div class="kpi-value">${pct2(p.netIrr)}</div>${d}<div class="kpi-note"><span>Net MoIC ${multiple(p.netMoic)}</span><span>${exit}</span><span>${exit ? '회수 완료' : ''}</span></div></div>`;
 }
 
-/** 펀드별 성과 탭 (7.8 v0.9): 전체·자산군·펀드의 예상 최종 Net IRR·MoIC */
+/** 성과 표 행 숨김: 자산군 행은 전체를 펼쳤을 때, 펀드 행은 전체와 그 자산군을 모두 펼쳤을 때 보임 */
+function perfRowHidden(level: string | undefined, parent: string | undefined, open: ReadonlySet<string>): boolean {
+  if (level === 'class') return !open.has('total');
+  if (level === 'fund') return !open.has('total') || !open.has(parent ?? '');
+  return false;
+}
+
+/** 다시 그리지 않고 펼침 상태만 반영 (표 스크롤 위치 유지) */
+function applyPerfOpen(root: ParentNode, open: ReadonlySet<string>): void {
+  for (const tr of root.querySelectorAll<HTMLTableRowElement>('.perf-table tr[data-perf-level]')) tr.hidden = perfRowHidden(tr.dataset.perfLevel, tr.dataset.perfParent, open);
+  for (const b of root.querySelectorAll<HTMLButtonElement>('button[data-perf-toggle]')) {
+    const o = open.has(b.dataset.perfToggle ?? '');
+    b.setAttribute('aria-expanded', String(o));
+    b.textContent = o ? '▾' : '▸';
+  }
+}
+
+/** 펀드별 성과 탭 (7.8 v0.9): 전체·자산군·펀드의 예상 최종 Net IRR·MoIC. 전체 → 자산군 → 펀드 2단 접기 (10.1 v0.9.3) */
 function renderPerformanceTable(out: SimOutput, base: SimOutput | null, state: ViewState): string {
   const cur = scopeKey(state.scope);
   const withBase = (v: number | null, b: number | null | undefined, fmt: (x: number | null) => string) =>
     base && b !== undefined && v !== null && b !== null && Math.abs(v - b) > 5e-6 ? `${fmt(v)} <span class="was">(${fmt(b)})</span>` : fmt(v);
-  const row = (key: string, label: string, p: Performance, bp: Performance | undefined, commitment: number, gross: string, cls: string) => `
-    <tr class="${cls}${key === cur ? ' current-scope' : ''}">
+  const open = new Set(state.perfOpen);
+  const toggle = (key: string, name: string) =>
+    `<button type="button" class="perf-toggle" data-perf-toggle="${key}" aria-expanded="${open.has(key)}" aria-label="${escapeHtml(name)} 펼치기/접기">${open.has(key) ? '▾' : '▸'}</button>`;
+  // level: total(항상 보임) → class(전체를 펼치면) → fund(전체와 그 자산군을 펼치면)
+  const row = (key: string, label: string, p: Performance, bp: Performance | undefined, commitment: number, gross: string, cls: string, level: 'total' | 'class' | 'fund', parent = '') => `
+    <tr class="${cls}${key === cur ? ' current-scope' : ''}" data-perf-level="${level}" data-perf-parent="${parent}"${perfRowHidden(level, parent, open) ? ' hidden' : ''}>
       <td>${label}</td><td>${money(commitment)}</td><td>${money(p.totalCall)}</td><td>${money(p.totalDist)}</td>
       <td>${p.lastExitQuarter === null ? '—' : exitLabel(p.lastExitQuarter, p.lastReachDate)}</td>${gross}
       <td class="net">${withBase(p.netIrr, bp?.netIrr, pct2)}</td><td class="net">${withBase(p.netMoic, bp?.netMoic, (x) => multiple(x ?? 0))}</td>
     </tr>`;
   const noGross = '<td>—</td><td>—</td>';
   const total = out.funds.reduce((s, f) => s + f.commitment, 0);
-  const rows: string[] = [row('total', '<strong>대체 포트폴리오 전체</strong>', out.performance.total, base?.performance.total, total, noGross, 'perf-total')];
+  const rows: string[] = [row('total', `${toggle('total', '대체 포트폴리오 전체')}<strong>대체 포트폴리오 전체</strong>`, out.performance.total, base?.performance.total, total, noGross, 'perf-total', 'total')];
   for (const c of ASSET_CLASSES) {
     const funds = out.funds.filter((f) => f.assetClass === c);
     if (funds.length === 0) continue;
-    rows.push(row(`class:${c}`, `<strong>${escapeHtml(CLASS_LABEL[c])}</strong>`, out.performance.byClass[c], base?.performance.byClass[c], funds.reduce((s, f) => s + f.commitment, 0), noGross, 'perf-class'));
+    rows.push(row(`class:${c}`, `${toggle(`class:${c}`, CLASS_LABEL[c])}<strong>${escapeHtml(CLASS_LABEL[c])}</strong>`, out.performance.byClass[c], base?.performance.byClass[c], funds.reduce((s, f) => s + f.commitment, 0), noGross, 'perf-class', 'class'));
     for (const f of funds) {
       const p = out.performance.byFund[f.id];
       if (!p) continue;
-      rows.push(row(`fund:${f.id}`, `<span class="perf-fund">${escapeHtml(f.name)}${f.type === 'direct' ? ' (직접투자)' : ''}</span>`, p, base?.performance.byFund[f.id], f.commitment, `<td>${pct(f.irr)}</td><td>${multiple(f.moic)}</td>`, 'perf-fund-row'));
+      rows.push(row(`fund:${f.id}`, `<span class="perf-fund">${escapeHtml(f.name)}${f.type === 'direct' ? ' (직접투자)' : ''}</span>`, p, base?.performance.byFund[f.id], f.commitment, `<td>${pct(f.irr)}</td><td>${multiple(f.moic)}</td>`, 'perf-fund-row', 'fund', `class:${c}`));
     }
   }
   return `<section class="tab-content">
-    <p class="table-note">완전 회수 시점 기준 예상 성과 · Net = 관리보수·성과보수 차감 후 LP 기준 · Gross = 적용 가정 · 단위 $mn${base ? ' · 괄호는 기본 가정' : ''}</p>
+    <div class="table-note perf-note"><span>완전 회수 시점 기준 예상 성과 · Net = 관리보수·성과보수 차감 후 LP 기준 · Gross = 적용 가정 · 단위 $mn${base ? ' · 괄호는 기본 가정' : ''}</span>
+      <span class="perf-bulk"><button type="button" class="text-btn" data-perf-bulk="expand">모두 펼치기</button><button type="button" class="text-btn" data-perf-bulk="collapse">모두 접기</button></span></div>
     <div class="table-wrap"><table class="data-table perf-table">
-      <thead><tr><th>구분</th><th>약정</th><th>총 Call</th><th>총 Distribution</th><th>최종 회수</th><th>Gross IRR</th><th>Gross MoIC</th><th>예상 Net IRR</th><th>예상 Net MoIC</th></tr></thead>
+      <thead><tr><th>구분</th><th>약정</th><th>총<br>Call</th><th>총<br>Distribution</th><th>최종 회수<br>(회수일)</th><th>Gross<br>IRR</th><th>Gross<br>MoIC</th><th>예상<br>Net IRR</th><th>예상<br>Net MoIC</th></tr></thead>
       <tbody>${rows.join('')}</tbody>
     </table></div>
   </section>`;
@@ -173,7 +205,7 @@ const signedMultiple = (v: number) => `${v >= 0 ? '+' : '−'}${Math.abs(v).toFi
 function renderKpi(view: ScopedView, out: SimOutput, baseKpi: KpiPoint | null, navLabel: string, basePerf: Performance | null): string {
   const k = view.kpi;
   const delta = (cur: number, base: number | undefined, fmt: (v: number) => string, fmtDelta: (v: number) => string) =>
-    base === undefined || Math.abs(cur - base) < 5e-4 ? '' : `<div class="kpi-delta">기본 ${fmt(base)} · <strong>${fmtDelta(cur - base)}</strong></div>`;
+    base === undefined || Math.abs(cur - base) < 5e-4 ? deltaBlock(null, null) : deltaBlock(`기본 ${fmt(base)}`, fmtDelta(cur - base));
   const card = (label: string, value: string, note: string, d: string) =>
     `<div class="kpi-card"><div class="kpi-label">${label}</div><div class="kpi-value">${value}</div>${d}<div class="kpi-note">${note}</div></div>`;
   const b = baseKpi ?? undefined;
@@ -182,7 +214,7 @@ function renderKpi(view: ScopedView, out: SimOutput, baseKpi: KpiPoint | null, n
     <div class="kpi-card kpi-hero">
       <div class="kpi-label">기준일 NAV</div>
       <div class="hero-figure"><span class="kpi-value">${money(k.nav)}</span><span class="hero-unit">$mn</span></div>
-      ${delta(k.nav, b?.nav, money, signedMoney)}
+      <div class="hero-delta">${delta(k.nav, b?.nav, money, signedMoney)}</div>
       <div class="kpi-note">기준일 평가가치 (${navLabel}) · 연말 NAV와 다름</div>
     </div>
     <div class="kpi-stats">
@@ -192,7 +224,7 @@ function renderKpi(view: ScopedView, out: SimOutput, baseKpi: KpiPoint | null, n
       ${card('TVPI', multiple(k.tvpi), '(Dist + NAV) ÷ Call', delta(k.tvpi, b?.tvpi, multiple, signedMultiple))}
       ${perfCard(view.performance, basePerf)}
     </div>
-    <p class="kpi-caption">기준일 ${escapeHtml(out.meta.asOf)} · 실현 기준 ${quarterLabel(out.meta.asOfQuarter)} 말 · 진행 연도 ${out.meta.asOfYear}${baseKpi ? ' · 회색 글씨는 기본 가정 대비' : ''}</p>
+    <p class="kpi-caption">기준일 ${escapeHtml(out.meta.asOf)} · 실현 기준 ${quarterLabel(out.meta.asOfQuarter)} 말 · 진행 연도 ${out.meta.asOfYear}<span class="${baseKpi ? '' : 'reserve'}"> · 회색 글씨는 기본 가정 대비</span></p>
   </section>`;
 }
 
@@ -203,7 +235,7 @@ function renderLegend(hasBase: boolean): string {
     <span><i class="ln ln-call"></i>누적 Capital Call</span>
     <span><i class="ln ln-dist"></i>누적 Distribution</span>
     <span><i class="ln ln-est"></i>점선 = 기준일 이후 추정</span>
-    ${hasBase ? '<span><i class="ln ln-base"></i>기본 가정 누적선</span>' : ''}
+    <span class="${hasBase ? '' : 'reserve'}"><i class="ln ln-base"></i>기본 가정 누적선</span>
   </div>`;
 }
 
@@ -218,7 +250,7 @@ function renderYearTable(view: ScopedView, out: SimOutput): string {
       </tr>`,
     )
     .join('');
-  const note = view.startYear > out.meta.calcStart ? `<p class="table-note">누적값은 ${out.meta.calcStart}년(최초 약정)부터 누적 (3.1-6).</p>` : '';
+  const note = view.startYear > out.meta.calcStart ? `<p class="table-note">누적값은 ${out.meta.calcStart}년(최초 약정)부터 누적</p>` : '';
   return `<section class="tab-content">
     <p class="table-note">단위 $mn</p>
     ${note}
@@ -280,9 +312,9 @@ function renderScenarioTable(c: Computed, state: ViewState): string {
     })
     .join('');
   return `<section class="tab-content">
-    <p class="table-note">전 자산군 동시 적용 (8장, 3.3-A) · 해석 설정이 기본이면 인쇄본과 같은 수치 · 최대 종료 연도 ${c.scenarios.maxEndYear} · 단위 $mn</p>
+    <p class="table-note">전 자산군 동시 적용 · 해석 설정이 기본이면 인쇄본과 같은 수치 · 최대 종료 연도 ${c.scenarios.maxEndYear} · 단위 $mn</p>
     <div class="table-wrap"><table class="data-table scenario-table">
-      <thead><tr><th>시나리오</th><th>종료<br>연도</th><th>마지막 회수<br>(회수일)</th><th>최종 누적<br>Call</th><th>최종 누적<br>Distribution</th><th>Δ 마지막<br>회수</th><th>Δ<br>Distribution</th><th>예상<br>Net IRR</th><th>예상<br>Net MoIC</th><th>기준일<br>TVPI</th><th></th></tr></thead>
+      <thead><tr><th>시나리오</th><th>종료<br>연도</th><th>마지막 회수<br>(회수일)</th><th>최종 누적<br>Call</th><th>최종 누적<br>Distribution</th><th>Δ 마지막<br>회수</th><th>Δ Distribution</th><th>예상<br>Net IRR</th><th>예상<br>Net MoIC</th><th>기준일<br>TVPI</th><th></th></tr></thead>
       <tbody>${rows}</tbody>
     </table></div>
   </section>`;
@@ -293,19 +325,19 @@ function renderAssumptions(): string {
     ['계산 단위', '연 단위. 약정·집행·관리보수는 매년 1월 1일 발생 (원문 가정 1·2)'],
     ['집행', '약정금을 집행기간 동안 매년 균등 집행. XXX(직접투자)는 2024년 1월 1일 전액 집행 (가정 2·6)'],
     ['가치 상승', '집행분 가치 = 집행액 × (1 + gIRR)^(경과 연수) (가정 3)'],
-    ['회수', 't* = ln(MoIC) / ln(1 + IRR). MoIC 달성 시점(투자 연도 + t*)에 집행액 × MoIC를 회수(가정 4). 괄호의 회수일이 그 날짜이며, 보고·집계·실현 판정은 그 날이 속한 분기(운용사 분기 보고 기준). Net IRR도 실제 회수일로 계산 (3.1)'],
-    ['관리보수', '약정액 기준, 집행기간 2%, 이후 1%. Vintage부터 해당 펀드 마지막 회수 연도까지 매년 1월 1일. 약정 안에서 충당: 투자금 = 약정 − 총보수를 집행기간 동안 균등 투자, 펀드 누적 Call = 약정 (가정 5, 3.4)'],
+    ['회수', 't* = ln(MoIC) / ln(1 + IRR). MoIC 달성 시점(투자 연도 + t*)에 집행액 × MoIC를 회수(가정 4). 괄호의 회수일이 그 날짜이며, 보고·집계·실현 판정은 그 날이 속한 분기(운용사 분기 보고 기준). Net IRR도 실제 회수일로 계산'],
+    ['관리보수', '약정액 기준, 집행기간 2%, 이후 1%. Vintage부터 해당 펀드 마지막 회수 연도까지 매년 1월 1일. 약정 안에서 충당: 투자금 = 약정 − 총보수를 집행기간 동안 균등 투자, 펀드 누적 Call = 약정 (가정 5)'],
     ['성과보수', '회수 시점에 (회수 총액 − 원금) × 20%. 허들·캐치업 없음. 직접투자는 보수 없음 (가정 5)'],
     ['Distribution', '회수 총액 − 성과보수'],
-    ['NAV', 'Gross: 미회수 집행분 평가가치 합. Net 옵션: 미실현 이익 × 20% 차감, 직접투자 제외 (3.5)'],
-    ['누적 기준', '2015년(DDD VI 약정)부터 누적, 표시는 2017년부터 (가정 9, 3.1-5·6)'],
-    ['시간축', 'NAV는 연말 값 막대, 누적 Call·Distribution은 실제 발생 시각의 계단형 선 (3.1-7)'],
-    ['실현/추정', '기준 분기말까지 실현(채움·실선), 이후 추정(빗금·점선). 인쇄본은 2026-09-30 = 2026 Q3 말 고정 (원문 "2026년 9월", 3.2)'],
-    ['민감도', 'IRR ±3%p 가감, MoIC ±20% 상대 변동 (설정에서 해석 전환). 3%p·20% 단위 −2~+2단계. IRR·MoIC 동시 조정 가능 (3.3)'],
-    ['XXX 연동', 'PE 조정을 XXX(직접투자)에도 같은 폭 적용, 설정에서 분리 가능 (3.3-4)'],
-    ['조정 하한', 'IRR′ ≥ 1%, MoIC′ > 1.0x. 위반 단계는 비활성화 — 손실 케이스의 성과보수 규칙이 원문에 없음 (3.3-C)'],
-    ['민감도 해석', '모든 집행분을 조정 IRR·MoIC로 투자 시점부터 다시 계산한 가상 시나리오. 실현/추정은 기준일 기준 표시 구분 (3.3-6)'],
-    ['시나리오 비교', '인쇄용 5개 시나리오는 전 자산군 동시 적용, 전 구간 재계산 (8장, 3.3-A)'],
+    ['NAV', 'Gross: 미회수 집행분 평가가치 합. Net 옵션: 미실현 이익 × 20% 차감, 직접투자 제외'],
+    ['누적 기준', '2015년(DDD VI 약정)부터 누적, 표시는 2017년부터 (가정 9)'],
+    ['시간축', 'NAV는 연말 값 막대, 누적 Call·Distribution은 실제 발생일(1월 1일·회수일)의 계단형 선'],
+    ['실현/추정', '기준 분기말까지 실현(채움·실선), 이후 추정(빗금·점선). 인쇄본은 2026-09-30 = 2026 Q3 말 고정 (원문 "2026년 9월")'],
+    ['민감도', 'IRR ±3%p 가감, MoIC ±20% 상대 변동 (설정에서 해석 전환). 3%p·20% 단위 −2~+2단계. IRR·MoIC 동시 조정 가능'],
+    ['XXX 연동', 'PE 조정을 XXX(직접투자)에도 같은 폭 적용, 설정에서 분리 가능'],
+    ['조정 하한', 'IRR′ ≥ 1%, MoIC′ > 1.0x. 위반 단계는 비활성화 — 손실 케이스의 성과보수 규칙이 원문에 없음'],
+    ['민감도 해석', '모든 집행분을 조정 IRR·MoIC로 투자 시점부터 다시 계산한 가상 시나리오. 실현/추정은 기준일 기준 표시 구분'],
+    ['시나리오 비교', '인쇄용 5개 시나리오는 전 자산군 동시 적용'],
   ];
   return `<section class="tab-content assumptions">
     <p class="table-note">원문 가정과 해석 결정</p>
@@ -358,7 +390,7 @@ export function renderDashboard(c: Computed, state: ViewState): string {
       ${renderKpi(view, out, baseView?.kpi ?? null, state.settings.navBasis === 'gross' ? 'Gross' : 'Net', baseView?.performance ?? null)}
       <section class="chart-panel">
         <div class="eyebrow">Cash Flow &amp; NAV</div>
-        <h2>${escapeHtml(view.title)} <span class="muted">${view.startYear}~${xEndYear} · 연말 NAV / 누적 Capital Call / 누적 Distribution${baseView ? ' · 회색 = 기본 가정' : ''}</span></h2>
+        <h2>${escapeHtml(view.title)} <span class="muted">${view.startYear}~${xEndYear} · 연말 NAV / 누적 Capital Call / 누적 Distribution<span class="${baseView ? '' : 'reserve'}"> · 회색 = 기본 가정</span></span></h2>
         ${renderLegend(baseView !== null)}
         <div class="chart-wrap">${renderMainChart(view, out.meta, chartOpts)}<div class="chart-tooltip" hidden></div></div>
       </section>
@@ -402,12 +434,15 @@ export function mountApp(root: HTMLElement, portfolio: Portfolio, initial: ViewS
     const c = compute(portfolio, state);
     // 다시 그려도 펼친 패널(해석 설정 등)은 유지
     const open = new Set([...body.querySelectorAll<HTMLDetailsElement>('details[data-panel]')].filter((d) => d.open).map((d) => d.dataset.panel));
+    // 차트 전환 애니메이션: 다시 그리기 전 좌표를 기록해 두고 새 좌표로 보간 (10.1 v0.9.3)
+    const before = snapshotChart(body);
     body.innerHTML = renderDashboard(c, state);
     for (const d of body.querySelectorAll<HTMLDetailsElement>('details[data-panel]')) if (open.has(d.dataset.panel)) d.open = true;
     const view = c.out.errors.length === 0 ? selectScope(c.out, state.scope) : null;
     const baseView = c.base && c.base.errors.length === 0 ? selectScope(c.base, state.scope) : null;
     const chart = body.querySelector<HTMLElement>('.chart-wrap');
     if (chart && view) bindChartTooltip(chart, view.series, baseView?.series);
+    if (chart) animateChart(chart, before);
   };
 
   const setShift = (cls: AssetClass, kind: 'irr' | 'moic', shift: number) => {
@@ -419,7 +454,22 @@ export function mountApp(root: HTMLElement, portfolio: Portfolio, initial: ViewS
   body.addEventListener('click', (e) => {
     const btn = e.target instanceof Element ? e.target.closest('button') : null;
     if (!btn || btn.disabled) return;
-    const { class: cls, kind, shift, preset } = btn.dataset;
+    const { class: cls, kind, shift, preset, perfToggle, perfBulk } = btn.dataset;
+    if (perfToggle || perfBulk) {
+      const open = new Set(state.perfOpen);
+      if (perfToggle) {
+        if (open.has(perfToggle)) open.delete(perfToggle);
+        else open.add(perfToggle);
+      } else if (perfBulk === 'expand') {
+        open.add('total');
+        for (const c of ASSET_CLASSES) open.add(`class:${c}`);
+      } else {
+        open.clear();
+      }
+      state = { ...state, perfOpen: [...open] };
+      applyPerfOpen(body, open);
+      return;
+    }
     if (cls && (kind === 'irr' || kind === 'moic') && shift !== undefined && (ASSET_CLASSES as readonly string[]).includes(cls)) {
       setShift(cls as AssetClass, kind, Number(shift));
     } else if (preset) {

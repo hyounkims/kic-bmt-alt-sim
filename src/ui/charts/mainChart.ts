@@ -116,7 +116,7 @@ export function renderMainChart(view: ScopedView, meta: Meta, opts: ChartOptions
   // 가로 눈금선 + y축 라벨
   const showY = opts.yLabels !== false;
   for (const v of ticks) {
-    parts.push(`<line class="grid" x1="${M.left}" x2="${M.left + pw}" y1="${f(y(v))}" y2="${f(y(v))}"/>`);
+    parts.push(`<line class="grid" data-k="grid-${ticks.indexOf(v)}" x1="${M.left}" x2="${M.left + pw}" y1="${f(y(v))}" y2="${f(y(v))}"/>`);
     if (showY) parts.push(`<text class="axis-label" x="${M.left - 8}" y="${f(y(v) + 4)}" text-anchor="end">${money(v).replace(/\.0$/, '')}</text>`);
   }
   if (showY) parts.push(`<text class="axis-unit" x="${M.left - 8}" y="${M.top - 14}" text-anchor="end">$mn</text>`);
@@ -144,8 +144,8 @@ export function renderMainChart(view: ScopedView, meta: Meta, opts: ChartOptions
     const realized = p.year + 1 <= tau;
     parts.push(
       realized
-        ? `<path class="bar bar-real" data-year="${p.year}" d="${d}"/>`
-        : `<path class="bar bar-est" data-year="${p.year}" d="${d}" fill="url(#${id('hatch-nav')})"/>`,
+        ? `<path class="bar bar-real" data-k="bar-${p.year}" data-year="${p.year}" d="${d}"/>`
+        : `<path class="bar bar-est" data-k="bar-${p.year}" data-year="${p.year}" d="${d}" fill="url(#${id('hatch-nav')})"/>`,
     );
   }
   parts.push(`<line class="baseline" x1="${M.left}" x2="${M.left + pw}" y1="${f(y(0))}" y2="${f(y(0))}"/>`);
@@ -172,20 +172,20 @@ export function renderMainChart(view: ScopedView, meta: Meta, opts: ChartOptions
   };
   if (opts.baseline) {
     for (const key of ['cumCall', 'cumDist'] as const) {
-      parts.push(`<path class="line line-base line-base-${key === 'cumCall' ? 'call' : 'dist'}" d="${stepPath(key, x0, x1, opts.baseline)}"/>`);
+      parts.push(`<path class="line line-base line-base-${key === 'cumCall' ? 'call' : 'dist'}" data-k="base-${key}" d="${stepPath(key, x0, x1, opts.baseline)}"/>`);
     }
   }
   for (const key of ['cumCall', 'cumDist'] as const) {
     const cls = key === 'cumCall' ? 'line-call' : 'line-dist';
-    if (tau > x0) parts.push(`<path class="line ${cls}" d="${stepPath(key, x0, Math.min(tau, x1), realizedSteps)}"/>`);
-    if (tau < x1) parts.push(`<path class="line ${cls} line-est" d="${estPath(key, Math.max(tau, x0))}"/>`);
+    if (tau > x0) parts.push(`<path class="line ${cls}" data-k="${cls}-real" d="${stepPath(key, x0, Math.min(tau, x1), realizedSteps)}"/>`);
+    if (tau < x1) parts.push(`<path class="line ${cls} line-est" data-k="${cls}-est" d="${estPath(key, Math.max(tau, x0))}"/>`);
   }
 
   // 선택적 값 라벨: 마지막 실현 연도 막대 위 (10.3 v0.8). 선 위에 보이도록 선 다음에 그림
   if (opts.valueLabel ?? !opts.compact) {
     const lastReal = [...bars].reverse().find((p) => p.nav > 0 && p.year + 1 <= tau);
     if (lastReal) {
-      parts.push(`<text class="bar-value" x="${f(x(lastReal.year + 0.5))}" y="${f(y(lastReal.nav) - 7)}" text-anchor="middle">${Math.round(lastReal.nav).toLocaleString('en-US')}</text>`);
+      parts.push(`<text class="bar-value" data-k="bar-value" x="${f(x(lastReal.year + 0.5))}" y="${f(y(lastReal.nav) - 7)}" text-anchor="middle">${Math.round(lastReal.nav).toLocaleString('en-US')}</text>`);
     }
   }
 
@@ -213,10 +213,10 @@ export function renderMainChart(view: ScopedView, meta: Meta, opts: ChartOptions
   const lx = M.left + pw + (opts.compact ? 6 : 10);
   const keyW = opts.compact ? 8 : 12;
   const endFmt = (v: number) => (opts.compact ? Math.round(v).toLocaleString('en-US') : money(v));
-  parts.push(`<line class="line-call key" x1="${lx}" x2="${lx + keyW}" y1="${f(yc - 4)}" y2="${f(yc - 4)}"/>`);
-  parts.push(`<text class="end-label" x="${lx + keyW + 4}" y="${f(yc)}">Call ${endFmt(endCall)}</text>`);
-  parts.push(`<line class="line-dist key" x1="${lx}" x2="${lx + keyW}" y1="${f(yd - 4)}" y2="${f(yd - 4)}"/>`);
-  parts.push(`<text class="end-label" x="${lx + keyW + 4}" y="${f(yd)}">Dist ${endFmt(endDist)}</text>`);
+  parts.push(`<line class="line-call key" data-k="key-call" x1="${lx}" x2="${lx + keyW}" y1="${f(yc - 4)}" y2="${f(yc - 4)}"/>`);
+  parts.push(`<text class="end-label" data-k="end-call" x="${lx + keyW + 4}" y="${f(yc)}">Call ${endFmt(endCall)}</text>`);
+  parts.push(`<line class="line-dist key" data-k="key-dist" x1="${lx}" x2="${lx + keyW}" y1="${f(yd - 4)}" y2="${f(yd - 4)}"/>`);
+  parts.push(`<text class="end-label" data-k="end-dist" x="${lx + keyW + 4}" y="${f(yd)}">Dist ${endFmt(endDist)}</text>`);
 
   // 호버 영역: 연도 밴드 전체 (막대보다 넓은 히트 영역)
   parts.push(`<rect class="hover-band" x="0" y="${M.top}" width="0" height="${ph}" visibility="hidden"/>`);

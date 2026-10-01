@@ -231,7 +231,19 @@ describe('민감도 조정 (M4)', () => {
     click(root, 'button[data-tab="performance"]');
     expect(root.querySelector<HTMLElement>('[data-tab-panel="performance"]')?.hidden).toBe(false);
     // 다시 그리면 DOM이 바뀌므로 매번 새로 찾는다
-    const rowOf = (label: string) => [...root.querySelectorAll('[data-tab-panel="performance"] .perf-table tbody tr')].find((tr) => tr.querySelector('td')?.textContent?.trim() === label);
+    const rowOf = (label: string) => [...root.querySelectorAll<HTMLTableRowElement>('[data-tab-panel="performance"] .perf-table tbody tr')].find((tr) => tr.querySelector('td')?.textContent?.replace(/[▾▸]/g, '').trim() === label);
+    // 기본: 전체 + 자산군 4개만 보이고 펀드 행은 접힘 (10.1 v0.9.3)
+    expect(rowOf('사모주식 PE')?.hidden).toBe(false);
+    expect(rowOf('AAA VII')?.hidden).toBe(true);
+    click(root, 'button[data-perf-toggle="class:PE"]');
+    expect(rowOf('AAA VII')?.hidden).toBe(false);
+    expect(rowOf('CCC V')?.hidden).toBe(true);
+    // 전체를 접으면 전체 행만
+    click(root, 'button[data-perf-toggle="total"]');
+    expect(rowOf('사모주식 PE')?.hidden).toBe(true);
+    expect(rowOf('AAA VII')?.hidden).toBe(true);
+    click(root, 'button[data-perf-bulk="expand"]');
+    expect([...root.querySelectorAll('[data-tab-panel="performance"] .perf-table tbody tr')].every((tr) => !(tr as HTMLElement).hidden)).toBe(true);
     const aaa = [...(rowOf('AAA VII')?.querySelectorAll('td.net') ?? [])].map((td) => td.textContent);
     expect(aaa).toEqual(['12.00%', '1.58x']);
     expect(rowOf('대체 포트폴리오 전체')?.querySelectorAll('td')[2]?.textContent).toBe('3,000.0');
@@ -244,6 +256,7 @@ describe('민감도 조정 (M4)', () => {
   it('M9: 대표 영역에 예상 최종 Net IRR 카드', () => {
     const perf = root.querySelector('.kpi-perf');
     expect(perf?.querySelector('.kpi-label')?.textContent).toBe('예상 최종 Net IRR');
-    expect(perf?.querySelector('.kpi-note')?.textContent).toContain('2032 Q1 (3/9) 회수 완료'); // BBB IX 2027 + 4.1878 → 2032년(366일) 69일째
+    // 노트는 3줄 고정 (10.1 v0.9.3). BBB IX 2027 + 4.1878 → 2032년(366일) 69일째 = 3/9
+    expect([...(perf?.querySelectorAll('.kpi-note span') ?? [])].map((e) => e.textContent)).toEqual(['Net MoIC 1.55x', '2032 Q1 (3/9)', '회수 완료']);
   });
 });
