@@ -5,7 +5,7 @@ import { DEFAULT_OPTIONS, PRINT_AS_OF, ZERO_SCENARIO } from '../../engine/consta
 import { runScenarios, summarizeScenarios, type ScenarioKey, type ScenarioSummaryRow } from '../../engine/scenarios';
 import type { Portfolio, SimInput } from '../../engine/types';
 import { chartMaxValue, renderMainChart } from '../charts/mainChart';
-import { escapeHtml, money, multiple, pct2, quarterLabel, signedQuarters } from '../format';
+import { escapeHtml, exitLabel, money, multiple, pct2, quarterLabel, signedQuarters } from '../format';
 import { selectScope, type Scope, type ScopedView } from '../scope';
 
 /** 인쇄 전용 입력 (10.2): 기준일 고정, 해석 기본값 */
@@ -48,14 +48,14 @@ function summaryTable(rows: readonly ScenarioSummaryRow[]): string {
   const body = rows
     .map((r) =>
       r.errors.length === 0
-        ? `<tr class="${r.preset.key === 'base' ? 'is-base' : ''}"><td>${escapeHtml(r.preset.label)}</td><td>${r.endYear}</td><td class="last-exit">${quarterLabel(r.lastExitQuarter)}</td><td>${money(r.finalCumCall)}</td><td>${money(r.finalCumDist)}</td>
+        ? `<tr class="${r.preset.key === 'base' ? 'is-base' : ''}"><td>${escapeHtml(r.preset.label)}</td><td>${r.endYear}</td><td class="last-exit">${exitLabel(r.lastExitQuarter, r.lastReachDate)}</td><td>${money(r.finalCumCall)}</td><td>${money(r.finalCumDist)}</td>
              <td class="delta">${r.vsBase ? signedQuarters(r.vsBase.lastExitQuarters) : '—'}</td><td class="delta">${r.vsBase ? signed(r.vsBase.finalCumDist, 1) : '—'}</td>
              <td class="net">${pct2(r.netIrr)}</td><td class="net">${multiple(r.netMoic)}</td></tr>`
         : `<tr><td>${escapeHtml(r.preset.label)}</td><td colspan="8">${escapeHtml(r.errors.join(', '))}</td></tr>`,
     )
     .join('');
   return `<table class="data-table print-summary">
-    <thead><tr><th>시나리오</th><th>종료 연도</th><th>마지막 회수 분기</th><th>최종 누적 Call</th><th>최종 누적 Distribution</th><th>Δ 마지막 회수</th><th>Δ Distribution</th><th>예상 Net IRR</th><th>예상 Net MoIC</th></tr></thead>
+    <thead><tr><th>시나리오</th><th>종료 연도</th><th>마지막 회수 (회수일)</th><th>최종 누적 Call</th><th>최종 누적 Distribution</th><th>Δ 마지막 회수</th><th>Δ Distribution</th><th>예상 Net IRR</th><th>예상 Net MoIC</th></tr></thead>
     <tbody>${body}</tbody>
   </table>`;
 }
@@ -126,7 +126,7 @@ function page(spec: PageSpec, portfolio: Portfolio): string {
       <div class="print-notes">
         <strong>가정 요약</strong>
         <ul>
-          <li>매년 1/1 균등 투자, gIRR로 성장, MoIC 도달 분기 말 회수</li>
+          <li>매년 1/1 균등 투자, gIRR로 성장, MoIC 도달일 회수(분기 단위 보고)</li>
           <li>관리보수 2%·1%는 약정 안: 투자금 = 약정 − 총보수, 누적 Call = 약정</li>
           <li>성과보수 (회수액 − 원금) × 20%, XXX 보수 없음, Net = 보수 차감 후</li>
           <li>민감도는 투자 시점부터 재계산한 가상 시나리오</li>

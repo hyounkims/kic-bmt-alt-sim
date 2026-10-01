@@ -83,8 +83,9 @@ describe('인쇄 뷰', () => {
   it('2페이지 마지막 회수 분기로 IRR 회수기간 변동 표시 (12장 PE t*, v0.9 분기)', () => {
     const p = pages[1]!;
     const lastExit = [...p.querySelectorAll('.print-summary td.last-exit')].map((td) => td.textContent);
-    // 기본 2023 + 4.19 → 2027 Q1, IRR −3%p 2023 + 4.96 → 2027 Q4, IRR +3%p 2023 + 3.64 → 2026 Q3
-    expect(lastExit.slice(0, 3)).toEqual(['2027 Q1', '2027 Q4', '2026 Q3']);
+    // 기본 2023 + 4.19 → 2027 Q1 (3/10), IRR −3%p 2023 + 4.96 → 2027 Q4 (12/17), IRR +3%p 2023 + 3.64 → 2026 Q3 (8/21)
+    // 회수일은 7.3 v0.9.2 규칙으로 독립 계산: 1/1 + ⌊소수부 × 365⌋일
+    expect(lastExit.slice(0, 3)).toEqual(['2027 Q1 (3/10)', '2027 Q4 (12/17)', '2026 Q3 (8/21)']);
   });
 
   it('1페이지 요약 표에도 마지막 회수 시각 열', () => {

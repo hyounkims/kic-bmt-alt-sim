@@ -31,3 +31,10 @@ export const quarterLabel = (q: QIndex): string => `${qYear(q)} Q${qNumber(q)}`;
 
 /** 분기 수 차이: +3분기 / −2분기 / 0분기 */
 export const signedQuarters = (n: number): string => (n === 0 ? '0분기' : `${n > 0 ? '+' : '−'}${Math.abs(n)}분기`);
+
+/** 회수 표기: 2027 Q2 (6/29) — 회수 분기 + 실제 회수일 (7.3 v0.9.2). 날짜는 엔진 출력 그대로. inline은 괄호 안 표기용 2027 Q2 · 6/29 */
+export const exitLabel = (q: QIndex, isoDate: string | null, inline = false): string => {
+  if (!isoDate) return quarterLabel(q);
+  const [, m, d] = isoDate.split('-').map(Number);
+  return inline ? `${quarterLabel(q)} · ${m}/${d}` : `${quarterLabel(q)} (${m}/${d})`;
+};

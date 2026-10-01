@@ -145,7 +145,7 @@ describe('민감도 조정 (M4)', () => {
   it('11.1 회수 시각 이동: PE IRR −3%p → AAA VII 2020 집행분 t* 4.19 → 4.96, 회수 시각 2024.19 → 2024.96', () => {
     click(root, shiftBtn('PE', 'irr', -0.03));
     expect(cellText(root, 'AAA_VII:2020', 'tstar')).toBe('4.96 (4.19)');
-    expect(cellText(root, 'AAA_VII:2020', 'exit-time')).toBe('2024 Q4 (2024 Q1)');
+    expect(cellText(root, 'AAA_VII:2020', 'exit-time')).toBe('2024 Q4 (12/17) (2024 Q1 · 3/9)'); // 11.1 회수일 v0.9.2
     expect(cellText(root, 'XXX:2024', 'tstar')).toBe('3.83 (3.49)'); // XXX도 PE 조정 적용 (3.3-4)
     expect(root.querySelectorAll('.line-base')).toHaveLength(2);
     expect(root.querySelectorAll('.kpi-delta').length).toBeGreaterThan(0);
@@ -244,6 +244,6 @@ describe('민감도 조정 (M4)', () => {
   it('M9: 대표 영역에 예상 최종 Net IRR 카드', () => {
     const perf = root.querySelector('.kpi-perf');
     expect(perf?.querySelector('.kpi-label')?.textContent).toBe('예상 최종 Net IRR');
-    expect(perf?.querySelector('.kpi-note')?.textContent).toContain('2032 Q1 회수 완료');
+    expect(perf?.querySelector('.kpi-note')?.textContent).toContain('2032 Q1 (3/9) 회수 완료'); // BBB IX 2027 + 4.1878 → 2032년(366일) 69일째
   });
 });
