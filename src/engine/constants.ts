@@ -18,8 +18,8 @@ export const MOIC_STEPS: readonly number[] = [-0.4, -0.2, 0, 0.2, 0.4];
 export const MOCK_FUND_COUNT = 12;
 export const MOCK_TOTAL_COMMITMENT = 3000;
 
-/** 3.2 인쇄 기준일 고정 (원문 "2026년 9월" → 9월 말) */
-export const PRINT_AS_OF = '2026-09-30';
+/** 3.2 기준일 기본값 (원문 "2026년 9월" → 9월 말). 화면·인쇄 공통, 인쇄는 화면 기준일을 따름 (v0.9.4) */
+export const DEFAULT_AS_OF = '2026-09-30';
 
 /** 모든 자산군에 같은 값 */
 export function byClassOf<T>(value: T): ByClass<T> {
@@ -34,7 +34,7 @@ export const ZERO_SCENARIO: Scenario = {
 
 /** 5장 입력 예시의 기본 옵션. 화면·인쇄 기준일 기본값 2026-09-30 (3.2 v0.9.1) */
 export const DEFAULT_OPTIONS: Options = {
-  asOf: PRINT_AS_OF,
+  asOf: DEFAULT_AS_OF,
   irrShiftMode: 'pp',
   moicShiftMode: 'relative',
   applyToDirect: true,

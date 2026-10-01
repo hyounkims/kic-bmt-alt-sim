@@ -64,7 +64,7 @@ describe('인쇄 뷰', () => {
     expect(p2.querySelectorAll('.print-summary tbody tr')[3]?.querySelectorAll('td.delta')[1]?.textContent).toBe('−75.6');
   });
 
-  it('기준일 2026-09-30 고정: 2025까지 채움, 2026부터 빗금 (모든 차트)', () => {
+  it('기본 기준일 2026-09-30: 2025까지 채움, 2026부터 빗금 (모든 차트)', () => {
     for (const cell of root.querySelectorAll('.print-cell')) {
       const real = [...cell.querySelectorAll('.bar-real')].map((b) => Number(b.getAttribute('data-year')));
       const est = [...cell.querySelectorAll('.bar-est')].map((b) => Number(b.getAttribute('data-year')));
@@ -99,13 +99,38 @@ describe('인쇄 뷰', () => {
   });
 });
 
-describe('인쇄 뷰는 화면 상태와 독립', () => {
-  it('화면 기준일을 바꿔도 인쇄 기준일은 2026-09-30', () => {
+describe('인쇄 기준일 = 화면 기준일, 나머지는 독립 (10.2 v0.9.4)', () => {
+  const head = (root: HTMLElement) => root.querySelector('.print-root .print-head p')?.textContent ?? '';
+  it('기본 2026-09-30 → 2026 Q3 말까지 실현', () => {
     const root = document.createElement('div');
     document.body.replaceChildren(root);
-    mountApp(root, mockPortfolio(), initialState({ kind: 'total' }, '2030-06-30'));
-    expect(root.querySelector('.print-root .print-head p')?.textContent).toContain('기준일 2026-09-30');
+    mountApp(root, mockPortfolio(), initialState({ kind: 'total' }, '2026-09-30'));
+    expect(head(root)).toContain('기준일 2026-09-30 (2026 Q3 말까지 실현');
+  });
+  it('화면 기준일을 바꾸면 인쇄도 그 기준일로 다시 그림 (인쇄 뷰는 하나만)', () => {
+    const root = document.createElement('div');
+    document.body.replaceChildren(root);
+    mountApp(root, mockPortfolio(), initialState({ kind: 'total' }, '2026-09-30'));
+    const input = root.querySelector<HTMLInputElement>('#asof-input');
+    if (!input) throw new Error('기준일 입력 없음');
+    input.value = '2030-06-30';
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    expect(head(root)).toContain('기준일 2030-06-30 (2030 Q2 말까지 실현');
     expect(root.querySelector('.screen-root .kpi-caption')?.textContent).toContain('2030-06-30');
+    expect(root.querySelectorAll('.print-root')).toHaveLength(1);
+    // 2030 Q2 말 기준: 2029년 막대까지 채움(실현), 2030년은 빗금
+    const p1 = root.querySelector('.print-page[data-page="1"] .print-cell.is-base');
+    expect(p1?.querySelector('.bar-real[data-year="2029"]')).not.toBeNull();
+    expect(p1?.querySelector('.bar-est[data-year="2030"]')).not.toBeNull();
+  });
+  it('민감도 조정·보기 범위는 인쇄에 반영하지 않음', () => {
+    const root = document.createElement('div');
+    document.body.replaceChildren(root);
+    mountApp(root, mockPortfolio(), initialState({ kind: 'fund', id: 'XXX' }, '2026-09-30'));
+    const before = root.querySelector('.print-root')?.innerHTML;
+    root.querySelector<HTMLButtonElement>('button[data-class="PE"][data-kind="irr"][data-shift="-0.03"]')?.click();
+    expect(root.querySelector('.print-root')?.innerHTML).toBe(before);
+    expect(root.querySelector('.print-page[data-page="1"] h1')?.textContent).toContain('대체 포트폴리오 전체');
   });
 });
 

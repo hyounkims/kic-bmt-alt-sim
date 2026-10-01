@@ -332,7 +332,7 @@ function renderAssumptions(): string {
     ['NAV', 'Gross: 미회수 집행분 평가가치 합. Net 옵션: 미실현 이익 × 20% 차감, 직접투자 제외'],
     ['누적 기준', '2015년(DDD VI 약정)부터 누적, 표시는 2017년부터 (가정 9)'],
     ['시간축', 'NAV는 연말 값 막대, 누적 Call·Distribution은 실제 발생일(1월 1일·회수일)의 계단형 선'],
-    ['실현/추정', '기준 분기말까지 실현(채움·실선), 이후 추정(빗금·점선). 인쇄본은 2026-09-30 = 2026 Q3 말 고정 (원문 "2026년 9월")'],
+    ['실현/추정', '기준 분기말까지 실현(채움·실선), 이후 추정(빗금·점선). 기준일 기본값은 2026-09-30 = 2026 Q3 말(원문 "2026년 9월"), 인쇄본도 화면 기준일을 따름'],
     ['민감도', 'IRR ±3%p 가감, MoIC ±20% 상대 변동 (설정에서 해석 전환). 3%p·20% 단위 −2~+2단계. IRR·MoIC 동시 조정 가능'],
     ['XXX 연동', 'PE 조정을 XXX(직접투자)에도 같은 폭 적용, 설정에서 분리 가능'],
     ['조정 하한', 'IRR′ ≥ 1%, MoIC′ > 1.0x. 위반 단계는 비활성화 — 손실 케이스의 성과보수 규칙이 원문에 없음'],
@@ -355,7 +355,7 @@ function renderGuide(): string {
     ['해석 설정', 'IRR %p/상대, MoIC 상대/절대, NAV Gross/Net, XXX 연동'],
     ['5개 시나리오', '전 자산군 동시 적용 결과 비교. "전 자산군 적용"으로 화면에 반영'],
     ['차트 툴팁', '연도 위에 마우스를 올리면 그해 NAV·누적값·당해 흐름 표시'],
-    ['인쇄 / PDF', '오른쪽 위 버튼. 기준일 2026-09-30 고정 2페이지. 프린터·Microsoft Print to PDF는 레이아웃 "가로", 용지 "A4" 선택'],
+    ['인쇄 / PDF', '오른쪽 위 버튼. 화면 기준일로 2페이지(전체 + AAA VII, 대표 시나리오 5개). 프린터·Microsoft Print to PDF는 레이아웃 "가로", 용지 "A4" 선택'],
   ];
   return `<details class="guide" data-panel="guide" id="guide">
     <summary><h2>사용 가이드</h2><span class="muted">조작법과 인쇄 설정</span></summary>
@@ -414,7 +414,7 @@ export function mountApp(root: HTMLElement, portfolio: Portfolio, initial: ViewS
     </div>
     <div class="header-actions">
       <button type="button" id="guide-btn" class="pill">사용 가이드</button>
-      <button type="button" id="print-btn" class="pill pill-dark" title="A4 가로 2페이지 · 기준일 2026-09-30 고정">인쇄 / PDF 저장 ▶</button>
+      <button type="button" id="print-btn" class="pill pill-dark" title="A4 가로 2페이지 · 화면 기준일 적용">인쇄 / PDF 저장 ▶</button>
     </div>`;
   header.querySelector('#print-btn')?.addEventListener('click', () => window.print());
   header.querySelector('#guide-btn')?.addEventListener('click', () => {
@@ -425,10 +425,21 @@ export function mountApp(root: HTMLElement, portfolio: Portfolio, initial: ViewS
   });
   const body = document.createElement('div');
   body.className = 'screen-root';
-  // 인쇄 뷰는 화면 상태와 독립이므로 한 번만 만든다 (10.2 v0.5)
-  const print = document.createElement('div');
-  print.innerHTML = renderPrintView(portfolio);
-  root.replaceChildren(header, body, ...print.childNodes);
+  // 인쇄 뷰: 기준일만 화면을 따르고 나머지는 독립 (10.2 v0.9.4). 기준일이 바뀔 때만 다시 만든다
+  let printedAsOf = '';
+  let printRoot: Element | null = null;
+  const syncPrint = () => {
+    if (state.asOf === printedAsOf && printRoot) return;
+    const tmp = document.createElement('div');
+    tmp.innerHTML = renderPrintView(portfolio, state.asOf);
+    const next = tmp.firstElementChild;
+    if (!next) return;
+    if (printRoot) printRoot.replaceWith(next);
+    else root.append(next);
+    printRoot = next;
+    printedAsOf = state.asOf;
+  };
+  root.replaceChildren(header, body);
 
   const render = () => {
     const c = compute(portfolio, state);
@@ -443,6 +454,7 @@ export function mountApp(root: HTMLElement, portfolio: Portfolio, initial: ViewS
     const chart = body.querySelector<HTMLElement>('.chart-wrap');
     if (chart && view) bindChartTooltip(chart, view.series, baseView?.series);
     if (chart) animateChart(chart, before);
+    syncPrint();
   };
 
   const setShift = (cls: AssetClass, kind: 'irr' | 'moic', shift: number) => {

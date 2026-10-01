@@ -1,16 +1,16 @@
 // 인쇄 뷰 (DESIGN.md 10.2, v0.8): A4 가로 2페이지, 페이지당 2행 × 3열 소형 차트 + 시나리오 요약 표.
-// 화면 상태와 독립: 기준일 2026-09-30 고정, 전 구간 재계산, 해석 기본값, 8장 5개 시나리오(전 자산군 동시).
+// 기준일만 화면을 따르고(기본 2026-09-30, v0.9.4), 그 밖에는 화면 상태와 독립: 해석 기본값, 8장 5개 시나리오(전 자산군 동시).
 
-import { DEFAULT_OPTIONS, PRINT_AS_OF, ZERO_SCENARIO } from '../../engine/constants';
+import { DEFAULT_AS_OF, DEFAULT_OPTIONS, ZERO_SCENARIO } from '../../engine/constants';
 import { runScenarios, summarizeScenarios, type ScenarioKey, type ScenarioSummaryRow } from '../../engine/scenarios';
 import type { Portfolio, SimInput } from '../../engine/types';
 import { chartMaxValue, renderMainChart } from '../charts/mainChart';
 import { escapeHtml, exitLabel, money, multiple, pct2, quarterLabel, signedQuarters } from '../format';
 import { selectScope, type Scope, type ScopedView } from '../scope';
 
-/** 인쇄 전용 입력 (10.2): 기준일 고정, 해석 기본값 */
-export function printInput(portfolio: Portfolio): SimInput {
-  return { portfolio, scenario: ZERO_SCENARIO, options: { ...DEFAULT_OPTIONS, asOf: PRINT_AS_OF } };
+/** 인쇄 전용 입력 (10.2 v0.9.4): 기준일은 화면 기준일, 해석은 기본값 */
+export function printInput(portfolio: Portfolio, asOf: string = DEFAULT_AS_OF): SimInput {
+  return { portfolio, scenario: ZERO_SCENARIO, options: { ...DEFAULT_OPTIONS, asOf } };
 }
 
 /** 2행 × 3열: 행 IRR / MoIC, 열 하향 / 기본 / 상향 */
@@ -60,8 +60,8 @@ function summaryTable(rows: readonly ScenarioSummaryRow[]): string {
   </table>`;
 }
 
-function page(spec: PageSpec, portfolio: Portfolio): string {
-  const runs = runScenarios(printInput(portfolio));
+function page(spec: PageSpec, portfolio: Portfolio, asOf: string): string {
+  const runs = runScenarios(printInput(portfolio, asOf));
   const summary = new Map(summarizeScenarios(runs, spec.scope).map((r) => [r.preset.key, r]));
   const byKey = new Map(runs.runs.map((r) => [r.preset.key, r.output]));
   const views = new Map<ScenarioKey, ScopedView>();
@@ -71,6 +71,7 @@ function page(spec: PageSpec, portfolio: Portfolio): string {
   }
   const anyView = views.get('base');
   if (!anyView) return `<section class="print-page"><p>인쇄 데이터 오류</p></section>`;
+  const baseMeta = byKey.get('base')?.meta;
   const x0 = anyView.startYear;
   // x축 끝 = 이 페이지 대상의 5개 시나리오 중 최대 종료 연도 (원문 "완전 회수 시점까지", 10.2 v0.7)
   const xEndYear = Math.max(...[...views.values()].map((v) => v.endYear));
@@ -113,7 +114,7 @@ function page(spec: PageSpec, portfolio: Portfolio): string {
       <div>
         <div class="print-eyebrow">Sensitivity Test · IRR / MoIC</div>
         <h1>${spec.no}. ${escapeHtml(spec.heading)} <span>${x0}년 ~ ${xEndYear}년</span></h1>
-        <p>기준일 ${PRINT_AS_OF} (2026 Q3 말까지 실현, 이후 추정 · 분기 보고 기준) · 민감도는 투자 시점부터 조정 가정으로 재계산 · 전 자산군 동시 적용</p>
+        <p>기준일 ${escapeHtml(asOf)} (${baseMeta ? `${quarterLabel(baseMeta.asOfQuarter)} 말까지 실현, ` : ''}이후 추정 · 분기 보고 기준) · 민감도는 투자 시점부터 조정 가정으로 재계산 · 전 자산군 동시 적용</p>
         <p>IRR ±3%p 가감 · MoIC ±20% 상대 변동 · 단위 $mn · 굵은 테두리 = 기본 가정 · 괄호 = 기본 대비 마지막 회수 분기 차이</p>
       </div>
       <div class="print-page-no">${spec.no} / ${PAGES.length}</div>
@@ -137,6 +138,6 @@ function page(spec: PageSpec, portfolio: Portfolio): string {
 }
 
 /** 인쇄용 2페이지 HTML. 화면에서는 숨기고 @media print에서만 보인다 */
-export function renderPrintView(portfolio: Portfolio): string {
-  return `<div class="print-root" aria-hidden="true">${PAGES.map((p) => page(p, portfolio)).join('')}</div>`;
+export function renderPrintView(portfolio: Portfolio, asOf: string = DEFAULT_AS_OF): string {
+  return `<div class="print-root" aria-hidden="true" data-as-of="${escapeHtml(asOf)}">${PAGES.map((p) => page(p, portfolio, asOf)).join('')}</div>`;
 }
