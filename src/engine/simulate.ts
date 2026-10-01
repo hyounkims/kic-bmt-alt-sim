@@ -28,7 +28,7 @@ function scoped<T>(fcs: readonly FundCalc[], f: (group: readonly FundCalc[]) => 
 }
 
 const ZERO_KPI: KpiPoint = { cumCall: 0, cumDist: 0, nav: 0, dpi: 0, tvpi: 0 };
-const EMPTY_PERF: Performance = { netIrr: null, netMoic: 0, totalCall: 0, totalDist: 0, lastExitQuarter: null };
+const EMPTY_PERF: Performance = { netIrr: null, netMoic: 0, totalCall: 0, totalDist: 0, lastExitQuarter: null, lastReachDate: null };
 
 function emptyByClass<T>(value: () => T): ByClass<T> {
   return Object.fromEntries(ASSET_CLASSES.map((c: AssetClass) => [c, value()])) as ByClass<T>;

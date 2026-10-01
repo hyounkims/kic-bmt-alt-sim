@@ -31,11 +31,11 @@ export function sortEvents(events: readonly CashEvent[]): CashEvent[] {
   );
 }
 
-/** 7.5 집행(call)·회수(dist) 이벤트. call은 1월 1일(그해 Q1), dist는 회수 분기말 */
+/** 7.5 집행(call)·회수(dist) 이벤트. call은 1월 1일(그해 Q1), dist는 실제 회수 시각 T·회수 분기 (v0.9.2) */
 export function trancheEvents(tranches: readonly Tranche[]): CashEvent[] {
   return tranches.flatMap((t): CashEvent[] => [
     { time: startOf(t.investYear), year: t.investYear, quarter: qOfYearStart(t.investYear), type: 'call', fundId: t.fundId, amount: t.amount },
-    { time: t.exitTime, year: t.exitYear, quarter: t.exitQuarter, type: 'dist', fundId: t.fundId, amount: t.exitNet },
+    { time: t.reachTime, year: t.exitYear, quarter: t.exitQuarter, type: 'dist', fundId: t.fundId, amount: t.exitNet },
   ]);
 }
 

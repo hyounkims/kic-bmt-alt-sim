@@ -117,7 +117,9 @@ export interface Tranche {
   readonly reachTime: YearTime;
   /** 회수 분기: T가 속한 분기 */
   readonly exitQuarter: QIndex;
-  /** 회수 인식 시각 = 회수 분기말 */
+  /** 실제 회수일 YYYY-MM-DD = T의 달력 날짜 (7.3 v0.9.2) */
+  readonly reachDate: string;
+  /** 회수 인식(보고) 시각 = 회수 분기말 */
   readonly exitTime: YearTime;
   /** 회수 분기의 연도 */
   readonly exitYear: Year;
@@ -190,6 +192,8 @@ export interface Performance {
   readonly totalDist: number;
   /** 최종 회수 분기 (집행분이 없으면 null) */
   readonly lastExitQuarter: QIndex | null;
+  /** 범위 내 마지막 회수일 (v0.9.2) */
+  readonly lastReachDate: string | null;
 }
 
 export interface SimError {

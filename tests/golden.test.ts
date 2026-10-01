@@ -67,6 +67,10 @@ describe('11.1 정답 케이스 (v0.9)', () => {
       expect(tr.map((t) => t.exitYear)).toEqual([2024, 2025, 2026, 2027]);
     });
 
+    it('집행분 회수일 2024-03-09 / 2025-03-10 / 2026-03-10 / 2027-03-10 (v0.9.2)', () => {
+      expect(tr.map((t) => t.reachDate)).toEqual(['2024-03-09', '2025-03-10', '2026-03-10', '2027-03-10']);
+    });
+
     it('집행분 순회수 118.8 (132 − 13.2)', () => {
       for (const t of tr) {
         expectExact(t.exitGross, 132, '회수 총액');
@@ -75,12 +79,12 @@ describe('11.1 정답 케이스 (v0.9)', () => {
       }
     });
 
-    it('예상 최종 Net MoIC 1.58x (475.2 / 300) / Net IRR 11.81% (7.8, 독립 계산)', () => {
+    it('예상 최종 Net MoIC 1.58x (475.2 / 300) / Net IRR 12.00% (7.8 v0.9.2, 독립 계산)', () => {
       const perf = base.performance.byFund['AAA_VII'];
       expectExact(perf?.netMoic, 475.2 / 300, 'Net MoIC');
       expectDisplay(perf?.netMoic, 1.58, 'Net MoIC 표시값');
-      // 표시값 11.81% → 소수 0.1181 ± 0.0001 (CLAUDE.md 표시값 허용 오차를 % 단위로)
-      expect(Math.abs((perf?.netIrr ?? Number.NaN) - 0.1181)).toBeLessThanOrEqual(0.0001);
+      // 표시값 12.00% → 소수 0.1200 ± 0.0001 (CLAUDE.md 표시값 허용 오차를 % 단위로)
+      expect(Math.abs((perf?.netIrr ?? Number.NaN) - 0.12)).toBeLessThanOrEqual(0.0001);
     });
 
     it('누적 Distribution 475.2, 누적 Capital Call 300 (= 약정)', () => {
@@ -112,10 +116,11 @@ describe('11.1 정답 케이스 (v0.9)', () => {
       expectExact(at(series, 2027).nav, 0, '2027 연말 NAV');
     });
 
-    it('예상 최종 Net IRR 29.93% (2.5^(1/3.5) − 1) / Net MoIC 2.50x', () => {
+    it('예상 최종 Net IRR 30.00% (= 가정 IRR, v0.9.2) / Net MoIC 2.50x, 회수일 2027-06-29', () => {
       const perf = base.performance.byFund['XXX'];
-      expect(Math.abs((perf?.netIrr ?? Number.NaN) - (Math.pow(2.5, 1 / 3.5) - 1))).toBeLessThan(1e-9);
-      expect(Math.abs((perf?.netIrr ?? Number.NaN) - 0.2993)).toBeLessThanOrEqual(0.0001);
+      expect(Math.abs((perf?.netIrr ?? Number.NaN) - 0.3)).toBeLessThan(1e-9);
+      expect(tr[0]?.reachDate).toBe('2027-06-29');
+      expect(perf?.lastReachDate).toBe('2027-06-29');
       expectExact(perf?.netMoic, 2.5, 'Net MoIC');
     });
 
@@ -178,6 +183,7 @@ describe('11.1 정답 케이스 (v0.9)', () => {
       expect(b?.exitQuarter).toBe(Q(2024, 1));
       expect(s?.exitQuarter).toBe(Q(2024, 4));
       expect(s?.exitYear).toBe(b?.exitYear);
+      expect([b?.reachDate, s?.reachDate]).toEqual(['2024-03-09', '2024-12-17']);
     });
 
     it('XXX IRR +3%p: t* 3.21, 2027 Q1 / −3%p: t* 3.83, 2027 Q4', () => {
@@ -187,6 +193,7 @@ describe('11.1 정답 케이스 (v0.9)', () => {
       expectDisplay(down?.tStar, 3.83, 'XXX IRR −3%p t*');
       expect(up?.exitQuarter).toBe(Q(2027, 1));
       expect(down?.exitQuarter).toBe(Q(2027, 4));
+      expect([up?.reachDate, down?.reachDate]).toEqual(['2027-03-19', '2027-11-01']);
     });
   });
 });

@@ -95,6 +95,23 @@ export function quarterOfReach(t: YearTime): QIndex {
   return (Math.ceil(4 * t - 1e-9) - 1) as QIndex;
 }
 
+/**
+ * 회수일 (7.3 v0.9.2): 도달 시각 T의 달력 날짜 YYYY-MM-DD.
+ * 1월 1일 + ⌊(T − y) × 그해 일수⌋일. 분기 규칙(4등분)과 달력 분기의 차이로 경계 근처에서
+ * 다른 분기 날짜가 나오면 회수 분기 q의 첫날~마지막 날로 제한한다
+ */
+export function reachDateOf(t: YearTime, q: QIndex): string {
+  const y = Math.floor(t);
+  const leap = (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
+  const dayIndex = Math.floor((t - y) * (leap ? 366 : 365) + 1e-9);
+  const ms = Date.UTC(y, 0, 1 + dayIndex);
+  const qy = qYear(q);
+  const qn = qNumber(q);
+  const first = Date.UTC(qy, (qn - 1) * 3, 1);
+  const last = Date.UTC(qy, qn * 3, 0);
+  return new Date(Math.min(Math.max(ms, first), last)).toISOString().slice(0, 10);
+}
+
 /** 기준 분기: 날짜 이전 마지막 분기말이 속한 분기 (그 날짜가 분기말이면 그 분기) (7.6) */
 export function asOfQuarterOf(iso: string): QIndex {
   if (!isValidIsoDate(iso)) throw new RangeError(`유효하지 않은 날짜: ${iso}`);

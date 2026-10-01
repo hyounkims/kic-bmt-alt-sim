@@ -2,7 +2,7 @@
 
 import { feeSchedule, type FeeItem } from './fees';
 import type { Fees, Fund, NavBasis, Options, Scenario, Tranche } from './types';
-import { asYear, asYearTime, qEndTime, qOfYearStart, qYear, quarterOfReach, startOf, type QIndex, type Year } from './time';
+import { asYear, asYearTime, qEndTime, qOfYearStart, qYear, quarterOfReach, startOf, type QIndex, type Year, reachDateOf } from './time';
 
 export interface Assumptions {
   readonly irr: number;
@@ -58,7 +58,7 @@ export function fundFeeTotal(fund: Fund, a: Assumptions, fees: Fees): number {
 
 /**
  * 7.1 + 7.3 + 7.4 (v0.9): 회수 분기 → 보수 일정·총보수 F → 집행 금액 A = (약정 − F) / n.
- * 회수는 도달 시각 T가 속한 분기의 분기말에 인식, 금액은 A × M′ (가정 4)
+ * 회수는 도달 시각 T가 속한 분기의 분기말에 인식(보고), 현금흐름은 T에 A × M′ (가정 4, v0.9.2)
  */
 export function buildTranches(fund: Fund, a: Assumptions, fees: Fees): FundBuild {
   const t = timings(fund, a);
@@ -77,6 +77,7 @@ export function buildTranches(fund: Fund, a: Assumptions, fees: Fees): FundBuild
       tStar: t.tStar,
       reachTime: r.reachTime,
       exitQuarter: r.exitQuarter,
+      reachDate: reachDateOf(r.reachTime, r.exitQuarter),
       exitTime: qEndTime(r.exitQuarter),
       exitYear: qYear(r.exitQuarter),
       exitGross,

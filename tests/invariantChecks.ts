@@ -1,7 +1,7 @@
 import { npv } from '../src/engine/performance';
 // DESIGN.md 11.2 불변 조건 검사 함수. mock 결정론 테스트와 fast-check 무작위 테스트가 공유한다.
 import { expect } from 'vitest';
-import { qOfYearStart, qYear, quarterOfReach } from '../src/engine/time';
+import { qEndTime, qNumber, qOfYearStart, qYear, quarterOfReach } from '../src/engine/time';
 import { ASSET_CLASSES, type SimInput, type SimOutput } from '../src/engine/types';
 
 export const FIELDS = ['callInvest', 'callFee', 'dist', 'nav', 'cumCall', 'cumDist'] as const;
@@ -47,6 +47,10 @@ export function checkInvariants(input: SimInput, out: SimOutput): void {
     expect(Number.isInteger(t.exitTime * 4), `${t.fundId} 분기말 인식`).toBe(true);
     expect(t.exitTime).toBeGreaterThanOrEqual(t.reachTime - 1e-9);
     expect(t.exitYear).toBe(qYear(t.exitQuarter));
+    // v0.9.2: 회수일은 회수 분기의 달력 범위 안
+    const [dy, dm] = t.reachDate.split('-').map(Number);
+    expect(dy, `${t.fundId} 회수일 연도`).toBe(qYear(t.exitQuarter));
+    expect(Math.floor(((dm ?? 0) - 1) / 3) + 1, `${t.fundId} 회수일 ${t.reachDate} 분기`).toBe(qNumber(t.exitQuarter));
     expect(t.amount, `${t.fundId} 집행 금액 > 0`).toBeGreaterThan(0);
   }
 
@@ -60,6 +64,11 @@ export function checkInvariants(input: SimInput, out: SimOutput): void {
     const y = e.year;
     // 이벤트 분기·연도 일관성: call·fee는 그해 Q1
     if (e.type !== 'dist') expect(e.quarter).toBe(qOfYearStart(e.year));
+    // v0.9.2: dist 시각 = 도달 시각 T, T ≤ 회수 분기말, T가 속한 분기 = 이벤트 분기
+    else {
+      expect(quarterOfReach(e.time)).toBe(e.quarter);
+      expect(e.time).toBeLessThanOrEqual(qEndTime(e.quarter) + 1e-12);
+    }
     expect(qYear(e.quarter)).toBe(e.year);
     const b = byYear.get(y) ?? { call: 0, fee: 0, dist: 0 };
     b[e.type] += e.amount;

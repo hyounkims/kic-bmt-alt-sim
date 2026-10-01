@@ -58,6 +58,8 @@ export interface ScenarioSummaryRow {
   readonly lastExitTime: YearTime;
   /** 마지막 회수 분기 (v0.9) */
   readonly lastExitQuarter: QIndex;
+  /** 마지막 회수일 (v0.9.2) */
+  readonly lastReachDate: string;
   readonly finalCumCall: number;
   readonly finalCumDist: number;
   /** 기준일 TVPI */
@@ -82,6 +84,7 @@ interface ScopeFigures {
   endYear: Year;
   lastExitTime: YearTime;
   lastExitQuarter: QIndex;
+  lastReachDate: string;
   finalCumCall: number;
   finalCumDist: number;
   tvpi: number;
@@ -97,15 +100,16 @@ function figuresOf(out: SimOutput, scope: ScopeRef): ScopeFigures | null {
   const kpi = pick(out.kpi);
   const lastExitTime = pick(out.lastExit);
   const perf = pick(out.performance);
-  if (!series || !kpi || lastExitTime === undefined || !perf) return null;
+  if (!series || !kpi || lastExitTime === undefined || !perf || perf.lastExitQuarter === null || perf.lastReachDate === null) return null;
   const funds = scope.kind === 'total' ? out.funds : out.funds.filter((f) => (scope.kind === 'class' ? f.assetClass === scope.id : f.id === scope.id));
   if (funds.length === 0) return null;
   const last = series[series.length - 1];
   return {
     endYear: (scope.kind === 'total' ? out.meta.endYear : Math.max(...funds.map((f) => f.lastExitYear))) as Year,
     lastExitTime,
-    // 회수 인식 시각은 분기말 (q + 1) / 4
-    lastExitQuarter: (Math.round(lastExitTime * 4) - 1) as QIndex,
+    // 시각에서 역산하지 않고 max(exitQuarter) 사용 (9장 v0.9.2)
+    lastExitQuarter: perf.lastExitQuarter,
+    lastReachDate: perf.lastReachDate,
     finalCumCall: last?.cumCall ?? 0,
     finalCumDist: last?.cumDist ?? 0,
     tvpi: kpi.tvpi,
@@ -121,7 +125,7 @@ export function summarizeScenarios(runs: ScenarioRuns, scope: ScopeRef): Scenari
   return runs.runs.map(({ preset, output }) => {
     const fig = figuresOf(output, scope);
     const errors = output.errors.length > 0 ? output.errors.map((e) => e.message) : fig ? [] : ['범위 없음'];
-    const f = fig ?? { endYear: 0 as Year, lastExitTime: 0 as YearTime, lastExitQuarter: 0 as QIndex, finalCumCall: 0, finalCumDist: 0, tvpi: 0, netIrr: null, netMoic: 0 };
+    const f = fig ?? { endYear: 0 as Year, lastExitTime: 0 as YearTime, lastExitQuarter: 0 as QIndex, lastReachDate: '', finalCumCall: 0, finalCumDist: 0, tvpi: 0, netIrr: null, netMoic: 0 };
     return {
       preset,
       errors,

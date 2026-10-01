@@ -1,4 +1,5 @@
-// 예상 최종 성과 (DESIGN.md 7.8 v0.9): 범위별 LP 순현금흐름의 Net IRR·Net MoIC
+// 예상 최종 성과 (DESIGN.md 7.8 v0.9): 범위별 LP 순현금흐름의 Net IRR·Net MoIC.
+// Distribution 시각은 실제 회수 시각 T (v0.9.2)
 
 import type { FundCalc } from './aggregate';
 import type { CashEvent, Performance } from './types';
@@ -51,12 +52,15 @@ export function performanceOf(fcs: readonly FundCalc[]): Performance {
   const events = fcs.flatMap((fc) => fc.events);
   const totalCall = events.filter((e) => e.type !== 'dist').reduce((s, e) => s + e.amount, 0);
   const totalDist = events.filter((e) => e.type === 'dist').reduce((s, e) => s + e.amount, 0);
-  const exits = fcs.flatMap((fc) => fc.tranches.map((t) => t.exitQuarter));
+  const tranches = fcs.flatMap((fc) => fc.tranches);
+  const exits = tranches.map((t) => t.exitQuarter);
+  const lastReach = tranches.reduce<(typeof tranches)[number] | null>((m, t) => (m === null || t.reachTime > m.reachTime ? t : m), null);
   return {
     netIrr: netIrr(lpFlows(events)),
     netMoic: totalCall > 0 ? totalDist / totalCall : 0,
     totalCall,
     totalDist,
     lastExitQuarter: exits.length > 0 ? (Math.max(...exits) as QIndex) : null,
+    lastReachDate: lastReach?.reachDate ?? null,
   };
 }
