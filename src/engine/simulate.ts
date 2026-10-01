@@ -3,7 +3,7 @@
 import { kpiOf, seriesOf, sortEvents, stepsOf, trancheEvents, type AggregateContext, type FundCalc } from './aggregate';
 import { feeEvents } from './fees';
 import { adjustAssumptions, buildTranches } from './tranches';
-import { dateToYearTime, startOf, yearOf, type Year, type YearTime } from './time';
+import { asOfQuarterOf, qEndTime, qYear, startOf, type QIndex, type Year, type YearTime } from './time';
 import {
   ASSET_CLASSES,
   type AssetClass,
@@ -35,7 +35,7 @@ function emptyByClass<T>(value: () => T): ByClass<T> {
 function errorOutput(input: SimInput, errors: readonly SimError[]): SimOutput {
   const { calcStart, displayStart, asOf } = input.options;
   return {
-    meta: { asOf, asOfTime: startOf(calcStart), asOfYear: calcStart, calcStart, displayStart, endYear: calcStart },
+    meta: { asOf, asOfTime: startOf(calcStart), asOfQuarter: (4 * calcStart) as QIndex, asOfYear: calcStart, calcStart, displayStart, endYear: calcStart },
     funds: [],
     tranches: [],
     events: [],
@@ -54,15 +54,17 @@ export function simulate(input: SimInput): SimOutput {
   const { portfolio, scenario, options } = input;
   const { fees } = portfolio;
 
-  const asOfTime = dateToYearTime(options.asOf);
+  // 기준 분기: 기준일 이전 마지막 분기말 (7.6 v0.9)
+  const asOfQuarter = asOfQuarterOf(options.asOf);
+  const asOfTime = qEndTime(asOfQuarter);
 
   // 7.1~7.4 펀드별 계산 (가정 조정 → 집행분 → 관리보수)
   const fundCalcs: FundCalc[] = [];
   const funds: FundInfo[] = [];
   for (const fund of portfolio.funds) {
     const a = adjustAssumptions(fund, scenario, options);
-    const tranches = buildTranches(fund, a, fees);
-    const events = [...trancheEvents(tranches), ...feeEvents(fund, tranches, fees)];
+    const { tranches, feeSchedule } = buildTranches(fund, a, fees);
+    const events = [...trancheEvents(tranches), ...feeEvents(fund, feeSchedule)];
     fundCalcs.push({ fund, tranches, events });
     funds.push({
       id: fund.id,
@@ -86,7 +88,8 @@ export function simulate(input: SimInput): SimOutput {
     calcStart: options.calcStart,
     endYear,
     asOfTime,
-    asOfYear: yearOf(asOfTime),
+    asOfQuarter,
+    asOfYear: qYear(asOfQuarter),
     fees,
     navBasis: options.navBasis,
   };
@@ -95,6 +98,7 @@ export function simulate(input: SimInput): SimOutput {
     meta: {
       asOf: options.asOf,
       asOfTime,
+      asOfQuarter,
       asOfYear: ctx.asOfYear,
       calcStart: options.calcStart,
       displayStart: options.displayStart,

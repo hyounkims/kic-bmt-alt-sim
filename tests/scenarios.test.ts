@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_OPTIONS } from '../src/engine/constants';
 import { runScenarios, SCENARIO_PRESETS, stepAvailability, summarizeScenarios } from '../src/engine/scenarios';
 import { ASSET_CLASSES } from '../src/engine/types';
+import { qIndexOf } from '../src/engine/time';
 import { baseInput, mockPortfolio } from './fixtures';
 
 // DESIGN.md 8장 시나리오 실행, 3.3-7 조정 단위, 3.3-C 하한
@@ -52,29 +53,33 @@ describe('stepAvailability (3.3-C)', () => {
   });
 });
 
-// 8장 v0.8 시나리오 요약·기본 대비 차이. 기대값은 12장 t*와 손 계산에서 유도
-describe('summarizeScenarios (8장 v0.8)', () => {
+// 8장 시나리오 요약·기본 대비 차이 (v0.9 분기). 기대값은 12장 t*와 손 계산에서 유도
+describe('summarizeScenarios (8장)', () => {
   const runs = runScenarios(baseInput());
   const near = (a: number | undefined, b: number, tol = 0.01) => expect(Math.abs((a ?? Number.NaN) - b)).toBeLessThanOrEqual(tol);
 
-  // 기본 마지막 회수 = BBB IX 2028 집행분(PE t* 4.19). IRR −3%p에서는 FFF VII 2028 집행분(PD t* 4.97)이 마지막이 됨 (12장)
-  it('전체: 기본 행은 차이 없음, IRR −3%p 마지막 회수 +0.78년 (2028 + 4.97 vs 2028 + 4.19)', () => {
+  // 기본 마지막 회수 = BBB IX 2028 + 4.19 → 2032 Q1. IRR −3%p에서는 FFF VII 2028 + 4.97(PD) → 2032 Q4
+  it('전체: 기본 행은 차이 없음, IRR −3%p 마지막 회수 +3분기, MoIC +20% 종료 연도 +1', () => {
     const rows = summarizeScenarios(runs, { kind: 'total' });
     expect(rows.map((r) => r.preset.key)).toEqual(['base', 'irrDown', 'irrUp', 'moicDown', 'moicUp']);
     expect(rows[0]?.vsBase).toBeNull();
-    near(rows[0]?.lastExitTime, 2032.19);
-    near(rows[1]?.vsBase?.lastExitTime, 4.97 - 4.19);
+    expect(rows[0]?.lastExitQuarter).toBe(qIndexOf(2032, 1));
+    expect(rows[1]?.vsBase?.lastExitQuarters).toBe(3);
     expect(rows[1]?.vsBase?.endYear).toBe(0);
-    expect(rows[4]?.vsBase?.endYear).toBe(1); // MoIC +20% 종료 2033
+    expect(rows[4]?.vsBase?.endYear).toBe(1);
+    near(rows[0]?.finalCumCall, 3000, 1e-6);
   });
 
-  it('AAA VII: IRR +3%p 마지막 회수 −0.55년, MoIC −20% 최종 Distribution 444 (기본 540 대비 −96)', () => {
+  it('AAA VII: IRR +3%p 마지막 회수 2026 Q3 (−2분기), MoIC −20% 최종 Distribution 399.6 (−75.6)', () => {
     const rows = summarizeScenarios(runs, { kind: 'fund', id: 'AAA_VII' });
-    near(rows[0]?.lastExitTime, 2027.19);
-    near(rows[2]?.vsBase?.lastExitTime, 3.64 - 4.19);
-    near(rows[3]?.finalCumDist, 444, 1e-6);
-    near(rows[3]?.vsBase?.finalCumDist, -96, 1e-6);
+    expect(rows[0]?.lastExitQuarter).toBe(qIndexOf(2027, 1));
+    expect(rows[2]?.lastExitQuarter).toBe(qIndexOf(2026, 3));
+    expect(rows[2]?.vsBase?.lastExitQuarters).toBe(-2);
+    // MoIC −20%: t* 2.84 → 2025 Q4 마지막, 보수 24 + 6 = 30 → 집행분 67.5 → 순회수 99.9 × 4
+    near(rows[3]?.finalCumDist, 399.6, 1e-6);
+    near(rows[3]?.vsBase?.finalCumDist, -75.6, 1e-6);
     expect(rows[3]?.endYear).toBe(2025);
+    near(rows[3]?.finalCumCall, 300, 1e-6);
   });
 
   it('차이 = 행 값 − 기본 행 값 (모든 범위)', () => {
@@ -83,7 +88,7 @@ describe('summarizeScenarios (8장 v0.8)', () => {
       const b = rows[0];
       for (const r of rows.slice(1)) {
         near(r.vsBase?.finalCumCall, r.finalCumCall - (b?.finalCumCall ?? 0), 1e-9);
-        near(r.vsBase?.lastExitTime, r.lastExitTime - (b?.lastExitTime ?? 0), 1e-9);
+        expect(r.vsBase?.lastExitQuarters).toBe(r.lastExitQuarter - (b?.lastExitQuarter ?? 0));
       }
     }
   });

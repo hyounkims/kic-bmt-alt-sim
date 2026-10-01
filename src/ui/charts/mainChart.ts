@@ -3,7 +3,7 @@
 // 출력 객체만 참조한다. 여기서는 좌표 변환·눈금 등 표시 계산만 한다.
 
 import type { Meta, SeriesPoint, StepPoint } from '../../engine/types';
-import { escapeHtml, money, PHASE_LABEL } from '../format';
+import { escapeHtml, money, PHASE_LABEL, quarterLabel } from '../format';
 import type { ScopedView } from '../scope';
 
 export interface ChartOptions {
@@ -151,6 +151,17 @@ export function renderMainChart(view: ScopedView, meta: Meta, opts: ChartOptions
   parts.push(`<line class="baseline" x1="${M.left}" x2="${M.left + pw}" y1="${f(y(0))}" y2="${f(y(0))}"/>`);
 
   // 계단형 누적선: 기준일 이전 실선, 이후 점선
+  // 실현/추정 분할은 분기 기준 (7.6 v0.9): Q4 말 회수와 다음 해 1월 1일 Call은 시각이 같아도 분기가 다름
+  const realizedSteps = view.steps.filter((p) => p.quarter <= meta.asOfQuarter);
+  const estimatedSteps = view.steps.filter((p) => p.quarter > meta.asOfQuarter);
+  const estPath = (key: 'cumCall' | 'cumDist', a: number): string => {
+    let d = `M${f(x(a))},${f(y(valueAt(realizedSteps, a, key)))}`;
+    for (const p of estimatedSteps) {
+      if (p.time < a || p.time > x1) continue;
+      d += `H${f(x(p.time))}V${f(y(p[key]))}`;
+    }
+    return `${d}H${f(x(x1))}`;
+  };
   const stepPath = (key: 'cumCall' | 'cumDist', a: number, b: number, steps: readonly StepPoint[] = view.steps): string => {
     let d = `M${f(x(a))},${f(y(valueAt(steps, a, key)))}`;
     for (const p of steps) {
@@ -166,8 +177,8 @@ export function renderMainChart(view: ScopedView, meta: Meta, opts: ChartOptions
   }
   for (const key of ['cumCall', 'cumDist'] as const) {
     const cls = key === 'cumCall' ? 'line-call' : 'line-dist';
-    if (tau > x0) parts.push(`<path class="line ${cls}" d="${stepPath(key, x0, Math.min(tau, x1))}"/>`);
-    if (tau < x1) parts.push(`<path class="line ${cls} line-est" d="${stepPath(key, Math.max(tau, x0), x1)}"/>`);
+    if (tau > x0) parts.push(`<path class="line ${cls}" d="${stepPath(key, x0, Math.min(tau, x1), realizedSteps)}"/>`);
+    if (tau < x1) parts.push(`<path class="line ${cls} line-est" d="${estPath(key, Math.max(tau, x0))}"/>`);
   }
 
   // 선택적 값 라벨: 마지막 실현 연도 막대 위 (10.3 v0.8). 선 위에 보이도록 선 다음에 그림
@@ -184,7 +195,7 @@ export function renderMainChart(view: ScopedView, meta: Meta, opts: ChartOptions
     parts.push(`<line class="asof-line" x1="${f(tx)}" x2="${f(tx)}" y1="${opts.compact ? M.top - 18 : M.top - 24}" y2="${M.top + ph}"/>`);
     if (opts.asOfText !== false) parts.push(`<text class="asof-label" x="${f(tx - 4)}" y="${M.top - 6}" text-anchor="end">◀ 실현</text>`);
     if (opts.asOfText !== false) parts.push(`<text class="asof-label" x="${f(tx + 4)}" y="${M.top - 6}">추정 ▶</text>`);
-    if (!opts.compact) parts.push(`<text class="asof-date" x="${f(tx)}" y="${M.top - 30}" text-anchor="middle">기준일 ${escapeHtml(meta.asOf)}</text>`);
+    if (!opts.compact) parts.push(`<text class="asof-date" x="${f(tx)}" y="${M.top - 30}" text-anchor="middle">기준 ${escapeHtml(quarterLabel(meta.asOfQuarter))} 말</text>`);
   }
 
   // 선 끝 직접 라벨 (값이 가까우면 겹치지 않게 벌림)

@@ -1,6 +1,7 @@
 // 표시용 서식. 반올림은 여기서만 한다 (CLAUDE.md 코드 규칙).
 
 import type { Phase } from '../engine/types';
+import { qNumber, qYear, type QIndex } from '../engine/time';
 
 const moneyFmt = new Intl.NumberFormat('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 
@@ -27,3 +28,9 @@ export function localIsoDate(d: Date): string {
   const p = (n: number) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
+
+/** 분기 표기: 2027 Q2 (v0.9) */
+export const quarterLabel = (q: QIndex): string => `${qYear(q)} Q${qNumber(q)}`;
+
+/** 분기 수 차이: +3분기 / −2분기 / 0분기 */
+export const signedQuarters = (n: number): string => (n === 0 ? '0분기' : `${n > 0 ? '+' : '−'}${Math.abs(n)}분기`);

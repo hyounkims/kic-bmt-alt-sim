@@ -57,9 +57,11 @@ describe('인쇄 뷰', () => {
 
   it('캡션·요약 표에 기본 대비 차이, 기본 행 강조 (v0.8)', () => {
     const p2 = pages[1]!;
-    expect(p2.querySelector('.print-cell[data-scenario="irrUp"] figcaption')?.textContent).toContain('−0.55년');
+    // AAA VII IRR +3%p: 2027 Q1 → 2026 Q3 (2023 + 3.64, 12장) = −2분기
+    expect(p2.querySelector('.print-cell[data-scenario="irrUp"] figcaption')?.textContent).toContain('2026 Q3 (−2분기)');
     expect(p2.querySelector('.print-summary tr.is-base td')?.textContent).toBe('기본');
-    expect(p2.querySelectorAll('.print-summary tbody tr')[3]?.querySelectorAll('td.delta')[1]?.textContent).toBe('−96.0');
+    // MoIC −20%: 보수 30 → 집행분 67.5, 순회수 99.9 × 4 = 399.6, 기본 475.2 대비 −75.6 (손 계산)
+    expect(p2.querySelectorAll('.print-summary tbody tr')[3]?.querySelectorAll('td.delta')[1]?.textContent).toBe('−75.6');
   });
 
   it('기준일 2026-09-30 고정: 2025까지 채움, 2026부터 빗금 (모든 차트)', () => {
@@ -78,11 +80,11 @@ describe('인쇄 뷰', () => {
     }
   });
 
-  it('2페이지 마지막 회수 시각으로 IRR 회수기간 변동 표시 (12장 PE t*)', () => {
+  it('2페이지 마지막 회수 분기로 IRR 회수기간 변동 표시 (12장 PE t*, v0.9 분기)', () => {
     const p = pages[1]!;
     const lastExit = [...p.querySelectorAll('.print-summary td.last-exit')].map((td) => td.textContent);
-    // 기본 2023 + 4.19, IRR −3%p 2023 + 4.96, IRR +3%p 2023 + 3.64
-    expect(lastExit.slice(0, 3)).toEqual(['2027.19', '2027.96', '2026.64']);
+    // 기본 2023 + 4.19 → 2027 Q1, IRR −3%p 2023 + 4.96 → 2027 Q4, IRR +3%p 2023 + 3.64 → 2026 Q3
+    expect(lastExit.slice(0, 3)).toEqual(['2027 Q1', '2027 Q4', '2026 Q3']);
   });
 
   it('1페이지 요약 표에도 마지막 회수 시각 열', () => {

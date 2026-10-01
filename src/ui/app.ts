@@ -5,10 +5,11 @@ import { byClassOf, DEFAULT_OPTIONS, ZERO_SCENARIO } from '../engine/constants';
 import { presetScenario, runScenarios, SCENARIO_PRESETS, stepAvailability, summarizeScenarios, type ScenarioRuns } from '../engine/scenarios';
 import { simulate } from '../engine/simulate';
 import { isValidIsoDate } from '../engine/time';
+import type { QIndex } from '../engine/time';
 import { ASSET_CLASSES, type AssetClass, type KpiPoint, type Options, type Portfolio, type Scenario, type SimError, type SimInput, type SimOutput, type Tranche } from '../engine/types';
 import { bindChartTooltip, renderMainChart } from './charts/mainChart';
 import { renderSensitivity, sameShift, stepLabel, type Availability, type Settings } from './controls/sensitivity';
-import { escapeHtml, money, multiple, pct, PHASE_LABEL, yearTime } from './format';
+import { escapeHtml, money, multiple, pct, PHASE_LABEL, quarterLabel, signedQuarters } from './format';
 import { renderPrintView } from './print/printView';
 import { CLASS_LABEL, parseScopeKey, scopeKey, selectScope, type Scope, type ScopedView } from './scope';
 
@@ -119,13 +120,12 @@ function renderControls(out: SimOutput, state: ViewState): string {
       <span>기준일</span>
       <input id="asof-input" type="date" value="${escapeHtml(state.asOf)}" required />
     </label>
-    <p class="control-note">기준일 이전 실현(채움·실선), 이후 추정(빗금·점선)</p>
+    <p class="control-note">→ <strong>${quarterLabel(out.meta.asOfQuarter)} 말</strong>까지 실현(채움·실선), 이후 추정(빗금·점선). 운용사 분기 보고 기준</p>
   </section>`;
 }
 
 const signedMoney = (v: number) => `${v >= 0 ? '+' : '−'}${money(Math.abs(v))}`;
 const signedMultiple = (v: number) => `${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(2)}x`;
-const signedYears = (v: number) => `${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(2)}`;
 
 function renderKpi(view: ScopedView, out: SimOutput, baseKpi: KpiPoint | null, navLabel: string): string {
   const k = view.kpi;
@@ -148,7 +148,7 @@ function renderKpi(view: ScopedView, out: SimOutput, baseKpi: KpiPoint | null, n
       ${card('DPI', multiple(k.dpi), 'Distribution ÷ Call', delta(k.dpi, b?.dpi, multiple, signedMultiple))}
       ${card('TVPI', multiple(k.tvpi), '(Dist + NAV) ÷ Call', delta(k.tvpi, b?.tvpi, multiple, signedMultiple))}
     </div>
-    <p class="kpi-caption">기준일 ${escapeHtml(out.meta.asOf)} (연 소수 시각 ${yearTime(out.meta.asOfTime)}) · 진행 연도 ${out.meta.asOfYear}${baseKpi ? ' · 회색 글씨는 기본 가정 대비' : ''}</p>
+    <p class="kpi-caption">기준일 ${escapeHtml(out.meta.asOf)} · 실현 기준 ${quarterLabel(out.meta.asOfQuarter)} 말 · 진행 연도 ${out.meta.asOfYear}${baseKpi ? ' · 회색 글씨는 기본 가정 대비' : ''}</p>
   </section>`;
 }
 
@@ -194,12 +194,12 @@ function renderTrancheTable(view: ScopedView, out: SimOutput, base: SimOutput | 
     .sort((a, b) => (names.get(a.fundId) ?? '').localeCompare(names.get(b.fundId) ?? '') || a.investYear - b.investYear)
     .map((t) => {
       const bt: Tranche | undefined = baseOf.get(`${t.fundId}:${t.investYear}`);
-      const done = t.exitTime <= out.meta.asOfTime;
+      const done = t.exitQuarter <= out.meta.asOfQuarter;
       return `<tr class="${done ? 'exited' : ''}" data-tranche="${t.fundId}:${t.investYear}">
         <td>${escapeHtml(names.get(t.fundId) ?? t.fundId)}</td><td>${t.investYear}</td><td>${money(t.amount)}</td>
         <td>${withBase(t.irr, bt?.irr, pct)}</td><td>${withBase(t.moic, bt?.moic, multiple)}</td>
         <td class="tstar">${withBase(t.tStar, bt?.tStar, (v) => v.toFixed(2))}</td>
-        <td class="exit-time">${withBase(t.exitTime, bt?.exitTime, yearTime)}</td><td>${withBase(t.exitYear, bt?.exitYear, String)}</td>
+        <td class="exit-time">${withBase(t.exitQuarter, bt?.exitQuarter, (q) => quarterLabel(q as QIndex))}</td><td>${withBase(t.exitYear, bt?.exitYear, String)}</td>
         <td>${money(t.exitGross)}</td><td>${money(t.carry)}</td><td>${money(t.exitNet)}</td>
         <td>${done ? '회수 완료' : '보유'}</td>
       </tr>`;
@@ -208,7 +208,7 @@ function renderTrancheTable(view: ScopedView, out: SimOutput, base: SimOutput | 
   return `<section class="tab-content">
     <p class="table-note">단위 $mn${base ? ' · 괄호는 기본 가정' : ''}</p>
     <div class="table-wrap"><table class="data-table tranche-table">
-      <thead><tr><th>펀드</th><th>투자 연도</th><th>집행액</th><th>IRR</th><th>MoIC</th><th>t* (년)</th><th>회수 시각</th><th>회수 연도</th><th>회수 총액</th><th>성과보수</th><th>순회수</th><th>기준일 상태</th></tr></thead>
+      <thead><tr><th>펀드</th><th>투자 연도</th><th>집행액</th><th>IRR</th><th>MoIC</th><th>t* (년)</th><th>회수 분기</th><th>회수 연도</th><th>회수 총액</th><th>성과보수</th><th>순회수</th><th>기준일 상태</th></tr></thead>
       <tbody>${rows}</tbody>
     </table></div>
   </section>`;
@@ -224,8 +224,8 @@ function renderScenarioTable(c: Computed, state: ViewState): string {
       const { preset } = r;
       const applied = ASSET_CLASSES.every((cl) => sameShift(state.scenario.irrShift[cl], preset.irrShift) && sameShift(state.scenario.moicShift[cl], preset.moicShift));
       const cells = r.errors.length === 0
-        ? `<td>${r.endYear}</td><td>${yearTime(r.lastExitTime)}</td><td>${money(r.finalCumCall)}</td><td>${money(r.finalCumDist)}</td>
-           <td class="delta">${r.vsBase ? signedYears(r.vsBase.lastExitTime) : '—'}</td><td class="delta">${r.vsBase ? signedMoney(r.vsBase.finalCumDist) : '—'}</td>
+        ? `<td>${r.endYear}</td><td>${quarterLabel(r.lastExitQuarter)}</td><td>${money(r.finalCumCall)}</td><td>${money(r.finalCumDist)}</td>
+           <td class="delta">${r.vsBase ? signedQuarters(r.vsBase.lastExitQuarters) : '—'}</td><td class="delta">${r.vsBase ? signedMoney(r.vsBase.finalCumDist) : '—'}</td>
            <td>${multiple(r.tvpi)}</td>`
         : `<td colspan="7" class="muted">${escapeHtml(r.errors.join(', '))}</td>`;
       return `<tr class="${applied ? 'applied' : ''}${preset.key === 'base' ? ' is-base' : ''}">
@@ -237,7 +237,7 @@ function renderScenarioTable(c: Computed, state: ViewState): string {
   return `<section class="tab-content">
     <p class="table-note">전 자산군 동시 적용 (8장, 3.3-A) · 해석 설정이 기본이면 인쇄본과 같은 수치 · 최대 종료 연도 ${c.scenarios.maxEndYear} · 단위 $mn</p>
     <div class="table-wrap"><table class="data-table scenario-table">
-      <thead><tr><th>시나리오</th><th>종료 연도</th><th>마지막 회수 시각</th><th>최종 누적 Call</th><th>최종 누적 Distribution</th><th>Δ 마지막 회수 (년)</th><th>Δ Distribution</th><th>기준일 TVPI</th><th></th></tr></thead>
+      <thead><tr><th>시나리오</th><th>종료 연도</th><th>마지막 회수 분기</th><th>최종 누적 Call</th><th>최종 누적 Distribution</th><th>Δ 마지막 회수</th><th>Δ Distribution</th><th>기준일 TVPI</th><th></th></tr></thead>
       <tbody>${rows}</tbody>
     </table></div>
   </section>`;
@@ -248,14 +248,14 @@ function renderAssumptions(): string {
     ['계산 단위', '연 단위. 약정·집행·관리보수는 매년 1월 1일 발생 (원문 가정 1·2)'],
     ['집행', '약정금을 집행기간 동안 매년 균등 집행. XXX(직접투자)는 2024년 1월 1일 전액 집행 (가정 2·6)'],
     ['가치 상승', '집행분 가치 = 집행액 × (1 + gIRR)^(경과 연수) (가정 3)'],
-    ['회수', 't* = ln(MoIC) / ln(1 + IRR). 회수 시각 = 투자 연도 + t*, 회수 연도 = ⌊회수 시각⌋, 회수 총액 = 집행액 × MoIC (가정 4)'],
-    ['관리보수', '약정액 기준, 집행기간 2%, 이후 1%. Vintage부터 해당 펀드 마지막 회수 연도까지. 약정액과 별도 Capital Call (가정 5, 3.4)'],
+    ['회수', 't* = ln(MoIC) / ln(1 + IRR). MoIC 도달 시각(투자 연도 + t*)이 속한 분기의 분기말에 회수 인식 — 운용사 분기 보고 기준. 회수 총액 = 집행액 × MoIC (가정 4, 3.1)'],
+    ['관리보수', '약정액 기준, 집행기간 2%, 이후 1%. Vintage부터 해당 펀드 마지막 회수 연도까지 매년 1월 1일. 약정 안에서 충당: 투자금 = 약정 − 총보수를 집행기간 동안 균등 투자, 펀드 누적 Call = 약정 (가정 5, 3.4)'],
     ['성과보수', '회수 시점에 (회수 총액 − 원금) × 20%. 허들·캐치업 없음. 직접투자는 보수 없음 (가정 5)'],
     ['Distribution', '회수 총액 − 성과보수'],
     ['NAV', 'Gross: 미회수 집행분 평가가치 합. Net 옵션: 미실현 이익 × 20% 차감, 직접투자 제외 (3.5)'],
     ['누적 기준', '2015년(DDD VI 약정)부터 누적, 표시는 2017년부터 (가정 9, 3.1-5·6)'],
     ['시간축', 'NAV는 연말 값 막대, 누적 Call·Distribution은 실제 발생 시각의 계단형 선 (3.1-7)'],
-    ['실현/추정', '기준일 이전 실현(채움·실선), 이후 추정(빗금·점선). 인쇄본은 2026-09-30 고정 (원문 "2026년 9월", 3.2)'],
+    ['실현/추정', '기준 분기말까지 실현(채움·실선), 이후 추정(빗금·점선). 인쇄본은 2026-09-30 = 2026 Q3 말 고정 (원문 "2026년 9월", 3.2)'],
     ['민감도', 'IRR ±3%p 가감, MoIC ±20% 상대 변동 (설정에서 해석 전환). 3%p·20% 단위 −2~+2단계. IRR·MoIC 동시 조정 가능 (3.3)'],
     ['XXX 연동', 'PE 조정을 XXX(직접투자)에도 같은 폭 적용, 설정에서 분리 가능 (3.3-4)'],
     ['조정 하한', 'IRR′ ≥ 1%, MoIC′ > 1.0x. 위반 단계는 비활성화 — 손실 케이스의 성과보수 규칙이 원문에 없음 (3.3-C)'],
@@ -272,7 +272,7 @@ function renderAssumptions(): string {
 function renderGuide(): string {
   const items: [string, string][] = [
     ['보기 범위', '전체 / 자산군 / 펀드를 선택. 주소 끝에 #fund:AAA_VII, #class:PE 를 붙여 바로 열 수도 있음'],
-    ['기준일', '이전은 실현(채움·실선), 이후는 추정(빗금·점선). 기본값은 오늘'],
+    ['기준일', '기준일 이전 마지막 분기말까지 실현(채움·실선), 이후 추정(빗금·점선). 기본값은 오늘'],
     ['민감도 조정', '자산군별 IRR(±3%p 단위)·MoIC(±20% 단위)를 누르면 즉시 반영. 빗금 버튼은 조정 하한(IRR′ ≥ 1%, MoIC′ > 1.0x) 위반으로 선택 불가. "기본 가정으로 초기화"로 되돌림'],
     ['비교', '조정하면 차트에 회색 기본 가정 누적선, KPI에 기본 대비 증감, 집행분 표에 괄호로 기본값 표시'],
     ['해석 설정', 'IRR %p/상대, MoIC 상대/절대, NAV Gross/Net, XXX 연동'],

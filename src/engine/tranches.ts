@@ -1,7 +1,8 @@
-// 집행분 생성·가정 조정·집행분 계산 (DESIGN.md 7.1~7.3, 전 구간 모드)
+// 집행분 생성·가정 조정·집행분 계산 (DESIGN.md 7.1~7.4, v0.9 분기 인식·약정 내 보수)
 
+import { feeSchedule, type FeeItem } from './fees';
 import type { Fees, Fund, NavBasis, Options, Scenario, Tranche } from './types';
-import { asYear, asYearTime, startOf, type Year, type YearTime } from './time';
+import { asYear, asYearTime, qEndTime, qOfYearStart, qYear, quarterOfReach, startOf, type QIndex, type Year } from './time';
 
 export interface Assumptions {
   readonly irr: number;
@@ -30,59 +31,74 @@ export function effectivePeriod(fund: Fund): number {
   return fund.type === 'direct' ? 1 : fund.investPeriod;
 }
 
-/** 집행분 하나를 만든다. 가치 경로 기본값은 투자 시각에서 시작하는 단일 성장 (전 구간 모드) */
-function makeTranche(
-  fund: Fund,
-  fees: Fees,
-  investYear: Year,
-  amount: number,
-  a: Assumptions,
-  exitTime: YearTime,
-  exitGross: number,
-): Tranche {
-  const carry = fund.type === 'direct' ? 0 : fees.carry * (exitGross - amount);
-  return {
-    fundId: fund.id,
-    investYear,
-    amount,
-    irr: a.irr,
-    moic: a.moic,
-    tStar: exitTime - investYear,
-    exitTime,
-    exitYear: Math.floor(exitTime) as Year,
-    exitGross,
-    carry,
-    exitNet: exitGross - carry,
-  };
+export interface FundBuild {
+  readonly tranches: Tranche[];
+  /** 보수 일정 (7.4) — 총보수 F = 합계 */
+  readonly feeSchedule: FeeItem[];
 }
 
-/** 7.1 + 7.3 펀드의 집행분 목록 (전 구간 모드) */
-export function buildTranches(fund: Fund, a: Assumptions, fees: Fees): Tranche[] {
+/** 집행 연도별 도달 시각·회수 분기 (금액과 무관) */
+function timings(fund: Fund, a: Assumptions) {
   const n = effectivePeriod(fund);
-  const amount = fund.commitment / n;
   const tStar = timeToMoic(a.irr, a.moic);
-  const tranches: Tranche[] = [];
-  for (let k = 0; k < n; k++) {
+  const rows = Array.from({ length: n }, (_, k) => {
     const investYear = asYear(fund.vintage + k);
-    const start = startOf(investYear);
-    const exitTime = asYearTime(start + tStar);
-    tranches.push(makeTranche(fund, fees, investYear, amount, a, exitTime, amount * a.moic));
-  }
-  return tranches;
+    const reachTime = asYearTime(startOf(investYear) + tStar);
+    const exitQuarter = quarterOfReach(reachTime);
+    return { investYear, reachTime, exitQuarter };
+  });
+  return { n, tStar, rows, lastExitYear: Math.max(...rows.map((r) => qYear(r.exitQuarter))) };
 }
 
-/** 가치 공식 (회수 여부와 무관): A × (1 + r′)^(τ − Y) */
+/** 펀드 총보수 F (7.4). 검증(F < 약정)과 집행 금액 계산에 사용 */
+export function fundFeeTotal(fund: Fund, a: Assumptions, fees: Fees): number {
+  const t = timings(fund, a);
+  return feeSchedule(fund, t.n, t.lastExitYear, fees).reduce((s, f) => s + f.amount, 0);
+}
+
+/**
+ * 7.1 + 7.3 + 7.4 (v0.9): 회수 분기 → 보수 일정·총보수 F → 집행 금액 A = (약정 − F) / n.
+ * 회수는 도달 시각 T가 속한 분기의 분기말에 인식, 금액은 A × M′ (가정 4)
+ */
+export function buildTranches(fund: Fund, a: Assumptions, fees: Fees): FundBuild {
+  const t = timings(fund, a);
+  const schedule = feeSchedule(fund, t.n, t.lastExitYear, fees);
+  const totalFee = schedule.reduce((s, f) => s + f.amount, 0);
+  const amount = (fund.commitment - totalFee) / t.n;
+  const exitGross = amount * a.moic;
+  const carry = fund.type === 'direct' ? 0 : fees.carry * (exitGross - amount);
+  const tranches = t.rows.map(
+    (r): Tranche => ({
+      fundId: fund.id,
+      investYear: r.investYear,
+      amount,
+      irr: a.irr,
+      moic: a.moic,
+      tStar: t.tStar,
+      reachTime: r.reachTime,
+      exitQuarter: r.exitQuarter,
+      exitTime: qEndTime(r.exitQuarter),
+      exitYear: qYear(r.exitQuarter),
+      exitGross,
+      carry,
+      exitNet: exitGross - carry,
+    }),
+  );
+  return { tranches, feeSchedule: schedule };
+}
+
+/** 가치 공식: A × (1 + r′)^(τ − Y) */
 function pathValue(t: Tranche, time: number): number {
   return t.amount * Math.pow(1 + t.irr, time - t.investYear);
 }
 
-/** 7.3 시각 τ의 평가가치: Y ≤ τ < T에서 가치 경로, 그 밖은 0 */
-export function trancheValueAt(t: Tranche, time: YearTime): number {
-  if (time < t.investYear || time >= t.exitTime) return 0;
-  return pathValue(t, time);
+/** 7.3 분기말 q의 평가가치: 투자 분기 ≤ q < 회수 분기에서 A × (1 + r′)^(분기말 − Y), 그 밖은 0 */
+export function trancheValueAtQuarter(t: Tranche, q: QIndex): number {
+  if (q < qOfYearStart(t.investYear) || q >= t.exitQuarter) return 0;
+  return pathValue(t, qEndTime(q));
 }
 
-/** 7.3 연말 NAV(y): Y ≤ y < E에서 연말 시각(y + 1)의 가치 경로, 그 밖은 0 */
+/** 7.3 연말 NAV(y) = Q4 말 가치: Y ≤ y < 회수 연도(회수 분기가 y년 Q4 이하면 0) */
 export function trancheYearEndNav(t: Tranche, year: Year): number {
   if (year < t.investYear || year >= t.exitYear) return 0;
   return pathValue(t, year + 1);

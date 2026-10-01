@@ -1,6 +1,6 @@
 // DESIGN.md 11.2 불변 조건 검사 함수. mock 결정론 테스트와 fast-check 무작위 테스트가 공유한다.
 import { expect } from 'vitest';
-import { yearOf } from '../src/engine/time';
+import { qOfYearStart, qYear, quarterOfReach } from '../src/engine/time';
 import { ASSET_CLASSES, type SimInput, type SimOutput } from '../src/engine/types';
 
 export const FIELDS = ['callInvest', 'callFee', 'dist', 'nav', 'cumCall', 'cumDist'] as const;
@@ -14,7 +14,7 @@ export function tolFor(input: SimInput): number {
 const near = (a: number | undefined, b: number | undefined, tol: number, label: string) =>
   expect(Math.abs((a ?? Number.NaN) - (b ?? Number.NaN)), `${label}: ${a} vs ${b}`).toBeLessThanOrEqual(tol);
 
-/** 11.2 공통 불변 조건 (전 구간·실무 모드) */
+/** 11.2 공통 불변 조건 (v0.9) */
 export function checkInvariants(input: SimInput, out: SimOutput): void {
   const tol = tolFor(input);
   expect(out.errors).toEqual([]);
@@ -22,8 +22,17 @@ export function checkInvariants(input: SimInput, out: SimOutput): void {
   const last = total[total.length - 1];
   const funds = new Map(input.portfolio.funds.map((f) => [f.id, f]));
 
-  // 누적 투자 Call 총합 = 약정 합계
-  near(total.reduce((s, p) => s + p.callInvest, 0), input.portfolio.funds.reduce((s, f) => s + f.commitment, 0), tol, '투자 Call 합');
+  // v0.9 3.4: 누적 Call(투자 + 보수) 총합 = 약정 합계, 투자 합 = 약정 − 보수
+  const commitments = input.portfolio.funds.reduce((s, f) => s + f.commitment, 0);
+  const investSum = total.reduce((s, p) => s + p.callInvest, 0);
+  const feeSum = total.reduce((s, p) => s + p.callFee, 0);
+  near(investSum + feeSum, commitments, tol, 'Call(투자 + 보수) 합 = 약정');
+  near(last?.cumCall, commitments, tol, '최종 누적 Call = 약정');
+  // 펀드별로도 Call 합 = 약정
+  for (const f of input.portfolio.funds) {
+    const s = out.series.byFund[f.id] ?? [];
+    near(s.at(-1)?.cumCall, f.commitment, tol, `${f.id} Call 합 = 약정`);
+  }
 
   // 회수 총액 = A × M′, 성과보수 = carry × (회수 총액 − A), direct는 0
   for (const t of out.tranches) {
@@ -32,6 +41,12 @@ export function checkInvariants(input: SimInput, out: SimOutput): void {
     near(t.carry, carry, tol, `${t.fundId} 성과보수`);
     near(t.exitNet, t.exitGross - t.carry, tol, `${t.fundId} 순회수`);
     expect(t.exitTime, `${t.fundId} 회수 시각 > 투자 시각`).toBeGreaterThan(t.investYear);
+    // v0.9 7.3: 회수는 도달 시각이 속한 분기의 분기말
+    expect(t.exitQuarter, `${t.fundId} 회수 분기`).toBe(quarterOfReach(t.reachTime));
+    expect(Number.isInteger(t.exitTime * 4), `${t.fundId} 분기말 인식`).toBe(true);
+    expect(t.exitTime).toBeGreaterThanOrEqual(t.reachTime - 1e-9);
+    expect(t.exitYear).toBe(qYear(t.exitQuarter));
+    expect(t.amount, `${t.fundId} 집행 금액 > 0`).toBeGreaterThan(0);
   }
 
   // 최종 연도 NAV = 0, 최종 누적 Distribution = Σ 순회수
@@ -41,7 +56,10 @@ export function checkInvariants(input: SimInput, out: SimOutput): void {
   // 연도별 집계 = 해당 연도 이벤트 합
   const byYear = new Map<number, { call: number; fee: number; dist: number }>();
   for (const e of out.events) {
-    const y = yearOf(e.time);
+    const y = e.year;
+    // 이벤트 분기·연도 일관성: call·fee는 그해 Q1
+    if (e.type !== 'dist') expect(e.quarter).toBe(qOfYearStart(e.year));
+    expect(qYear(e.quarter)).toBe(e.year);
     const b = byYear.get(y) ?? { call: 0, fee: 0, dist: 0 };
     b[e.type] += e.amount;
     byYear.set(y, b);

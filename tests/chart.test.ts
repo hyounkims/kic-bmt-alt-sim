@@ -31,9 +31,10 @@ describe('선택적 값 라벨·소형 옵션', () => {
     return d;
   };
 
-  it('화면 차트: 마지막 실현 연도(2025) 막대 위에만 값 라벨 2,260', () => {
+  it('화면 차트: 마지막 실현 연도(2025) 막대 위에만 값 라벨 = 그해 연말 NAV', () => {
     const labels = [...svg({ idPrefix: 't' }).querySelectorAll('.bar-value')].map((t) => t.textContent);
-    expect(labels).toEqual(['2,260']);
+    const nav2025 = out.series.total.find((p) => p.year === 2025)?.nav ?? Number.NaN;
+    expect(labels).toEqual([Math.round(nav2025).toLocaleString('en-US')]);
   });
 
   it('소형 차트: 기본은 값 라벨 없음, yLabels·asOfText false면 y축 숫자·실현/추정 글자 없음', () => {

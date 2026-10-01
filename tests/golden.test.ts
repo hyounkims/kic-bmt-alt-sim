@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { simulate } from '../src/engine/simulate';
 import { timeToMoic, trancheYearEndNav } from '../src/engine/tranches';
-import { asYear } from '../src/engine/time';
+import { asYear, qIndexOf } from '../src/engine/time';
 import type { SeriesPoint, SimOutput } from '../src/engine/types';
 import { baseInput, expectDisplay, expectExact, uniformScenario } from './fixtures';
 
-// DESIGN.md 11.1 정답 케이스 (고정 입력, 기준일 2026-09-30, 전 구간 모드)
+// DESIGN.md 11.1 정답 케이스 v0.9 (고정 입력, 기준일 2026-09-30 = 기준 분기 2026 Q3)
 // 기대값은 DESIGN.md 수치를 그대로 옮긴 것이다. 엔진 결과에 맞춰 고치지 않는다 (CLAUDE.md 절대 규칙 4).
 
 const base = simulate(baseInput());
@@ -26,9 +26,13 @@ function tranchesOf(out: SimOutput, fundId: string) {
   return out.tranches.filter((t) => t.fundId === fundId).sort((a, b) => a.investYear - b.investYear);
 }
 
-describe('11.1 정답 케이스', () => {
-  it('기본 입력은 오류 없음', () => {
+const Q = qIndexOf;
+
+describe('11.1 정답 케이스 (v0.9)', () => {
+  it('기본 입력은 오류 없음, 기준 분기 2026 Q3', () => {
     expect(base.errors).toEqual([]);
+    expect(base.meta.asOfQuarter).toBe(Q(2026, 3));
+    expect(base.meta.asOfTime).toBe(2026.75);
   });
 
   describe('AAA VII (기본)', () => {
@@ -36,45 +40,44 @@ describe('11.1 정답 케이스', () => {
     const series = fundSeries(base, 'AAA_VII');
     const last = series[series.length - 1];
 
-    it('2020 집행분 연말 NAV 2020~2023 = 88.50 / 104.43 / 123.23 / 145.41', () => {
-      const t2020 = tr[0];
-      expect(t2020?.investYear).toBe(2020);
-      if (!t2020) return;
-      [88.5, 104.43, 123.23, 145.41].forEach((v, i) => expectDisplay(trancheYearEndNav(t2020, asYear(2020 + i)), v, `${2020 + i} 연말 NAV`));
-      expectExact(trancheYearEndNav(t2020, asYear(2024)), 0, '2024(회수 연도) 연말 NAV');
-      // 2020년에는 집행분이 하나뿐이므로 펀드 연말 NAV와도 같아야 한다
-      expectDisplay(at(series, 2020).nav, 88.5, '펀드 2020 연말 NAV');
-    });
-
-    it('집행분 회수 시각 2024.19 / 2025.19 / 2026.19 / 2027.19, 회수 연도 2024~2027', () => {
-      expect(tr.map((t) => t.investYear)).toEqual([2020, 2021, 2022, 2023]);
-      [2024.19, 2025.19, 2026.19, 2027.19].forEach((v, i) => expectDisplay(tr[i]?.exitTime, v, `집행분 ${i} 회수 시각`));
-      expect(tr.map((t) => t.exitYear)).toEqual([2024, 2025, 2026, 2027]);
-      // 9장 v0.6 lastExit: 마지막 집행분 회수 시각
-      expectDisplay(base.lastExit.byFund['AAA_VII'], 2027.19, 'lastExit AAA VII');
-    });
-
-    it('집행분 순회수 135 (150 − 15)', () => {
-      for (const t of tr) {
-        expectExact(t.exitGross, 150, '회수 총액');
-        expectExact(t.carry, 15, '성과보수');
-        expectExact(t.exitNet, 135, '순회수');
-      }
-    });
-
-    it('누적 Distribution 540', () => {
-      expectExact(last?.cumDist, 540, '최종 누적 Distribution');
-    });
-
-    it('관리보수 2020~2023 연 6, 2024~2027 연 3 → 36', () => {
+    it('관리보수 2020~2023 연 6, 2024~2027 연 3 → 36 (약정 안)', () => {
       const fees = base.events.filter((e) => e.fundId === 'AAA_VII' && e.type === 'fee');
-      expect(fees.map((e) => e.time)).toEqual([2020, 2021, 2022, 2023, 2024, 2025, 2026, 2027]);
-      fees.forEach((e) => expectExact(e.amount, e.time < 2024 ? 6 : 3, `${e.time} 관리보수`));
+      expect(fees.map((e) => e.year)).toEqual([2020, 2021, 2022, 2023, 2024, 2025, 2026, 2027]);
+      fees.forEach((e) => expectExact(e.amount, e.year < 2024 ? 6 : 3, `${e.year} 관리보수`));
       expectExact(series.reduce((s, p) => s + p.callFee, 0), 36, '관리보수 합계');
     });
 
-    it('누적 Capital Call 336', () => {
-      expectExact(last?.cumCall, 336, '최종 누적 Capital Call');
+    it('집행분 금액 (300 − 36) / 4 = 66', () => {
+      expect(tr.map((t) => t.investYear)).toEqual([2020, 2021, 2022, 2023]);
+      tr.forEach((t) => expectExact(t.amount, 66, `${t.investYear} 집행분`));
+    });
+
+    it('2020 집행분 연말 NAV 2020~2023 = 77.88 / 91.90 / 108.44 / 127.96', () => {
+      const t2020 = tr[0];
+      expect(t2020?.investYear).toBe(2020);
+      if (!t2020) return;
+      [77.88, 91.9, 108.44, 127.96].forEach((v, i) => expectDisplay(trancheYearEndNav(t2020, asYear(2020 + i)), v, `${2020 + i} 연말 NAV`));
+      expectExact(trancheYearEndNav(t2020, asYear(2024)), 0, '2024(회수 연도) 연말 NAV');
+      expectDisplay(at(series, 2020).nav, 77.88, '펀드 2020 연말 NAV');
+    });
+
+    it('집행분 회수 분기 2024 Q1 / 2025 Q1 / 2026 Q1 / 2027 Q1 (분기말 인식)', () => {
+      expect(tr.map((t) => t.exitQuarter)).toEqual([Q(2024, 1), Q(2025, 1), Q(2026, 1), Q(2027, 1)]);
+      expect(tr.map((t) => t.exitTime)).toEqual([2024.25, 2025.25, 2026.25, 2027.25]);
+      expect(tr.map((t) => t.exitYear)).toEqual([2024, 2025, 2026, 2027]);
+    });
+
+    it('집행분 순회수 118.8 (132 − 13.2)', () => {
+      for (const t of tr) {
+        expectExact(t.exitGross, 132, '회수 총액');
+        expectExact(t.carry, 13.2, '성과보수');
+        expectExact(t.exitNet, 118.8, '순회수');
+      }
+    });
+
+    it('누적 Distribution 475.2, 누적 Capital Call 300 (= 약정)', () => {
+      expectExact(last?.cumDist, 475.2, '최종 누적 Distribution');
+      expectExact(last?.cumCall, 300, '최종 누적 Capital Call');
     });
   });
 
@@ -82,16 +85,17 @@ describe('11.1 정답 케이스', () => {
     const tr = tranchesOf(base, 'XXX');
     const series = fundSeries(base, 'XXX');
 
-    it('투자 2024년 400', () => {
+    it('투자 2024년 400 (보수 없음)', () => {
       expect(tr).toHaveLength(1);
       expect(tr[0]?.investYear).toBe(2024);
       expectExact(tr[0]?.amount, 400, '집행 금액');
       expectExact(at(series, 2024).callInvest, 400, '2024 투자 Call');
+      expect(base.events.filter((e) => e.fundId === 'XXX' && e.type === 'fee')).toEqual([]);
     });
 
-    it('t* / 회수 시각 / 회수 연도 = 3.49 / 2027.49 / 2027', () => {
+    it('t* 3.49 / 회수 2027 Q2', () => {
       expectDisplay(tr[0]?.tStar, 3.49, 't*');
-      expectDisplay(tr[0]?.exitTime, 2027.49, '회수 시각');
+      expect(tr[0]?.exitQuarter).toBe(Q(2027, 2));
       expect(tr[0]?.exitYear).toBe(2027);
     });
 
@@ -100,33 +104,39 @@ describe('11.1 정답 케이스', () => {
       expectExact(at(series, 2027).nav, 0, '2027 연말 NAV');
     });
 
-    it('회수 1,000 (보수 0)', () => {
+    it('회수 1,000', () => {
       expectExact(tr[0]?.exitGross, 1000, '회수 총액');
       expectExact(tr[0]?.carry, 0, '성과보수');
       expectExact(tr[0]?.exitNet, 1000, '순회수');
-      expect(base.events.filter((e) => e.fundId === 'XXX' && e.type === 'fee')).toEqual([]);
     });
   });
 
   describe('DDD VI 2016년 말 누적', () => {
-    const upTo2016 = fundSeries(base, 'DDD_VI').filter((p) => p.year <= 2016);
+    const series = fundSeries(base, 'DDD_VI');
+    const upTo2016 = series.filter((p) => p.year <= 2016);
 
-    it('누적 투자 Call 66.67', () => {
-      expectDisplay(upTo2016.reduce((s, p) => s + p.callInvest, 0), 66.67, '누적 투자 Call');
+    it('총보수 32 (2015~2020 연 4 + 2021~2024 연 2) → 집행분 28', () => {
+      expectExact(series.reduce((s, p) => s + p.callFee, 0), 32, '총보수');
+      tranchesOf(base, 'DDD_VI').forEach((t) => expectExact(t.amount, 28, `${t.investYear} 집행분`));
+    });
+
+    it('누적 투자 Call 56.00', () => {
+      expectDisplay(upTo2016.reduce((s, p) => s + p.callInvest, 0), 56, '누적 투자 Call');
     });
 
     it('누적 관리보수 8.00', () => {
       expectDisplay(upTo2016.reduce((s, p) => s + p.callFee, 0), 8.0, '누적 관리보수');
     });
 
-    it('NAV 81.32', () => {
-      expectDisplay(at(upTo2016, 2016).nav, 81.32, '2016 연말 NAV');
+    it('NAV 68.31', () => {
+      expectDisplay(at(upTo2016, 2016).nav, 68.31, '2016 연말 NAV');
     });
   });
 
-  describe('포트폴리오 종료 연도', () => {
-    it('기본 endYear 2032', () => {
+  describe('포트폴리오', () => {
+    it('기본 endYear 2032 (2032 Q1)', () => {
       expect(base.meta.endYear).toBe(2032);
+      expect(Math.max(...base.tranches.map((t) => t.exitQuarter))).toBe(Q(2032, 1));
     });
 
     it('5개 시나리오(8장) 최대 endYear 2033', () => {
@@ -135,24 +145,33 @@ describe('11.1 정답 케이스', () => {
       outs.forEach((o) => expect(o.errors).toEqual([]));
       expect(Math.max(...outs.map((o) => o.meta.endYear))).toBe(2033);
     });
+
+    it('최종 누적 Capital Call 3,000 (= 약정 합계)', () => {
+      expectExact(base.series.total.at(-1)?.cumCall, 3000, '최종 누적 Call');
+    });
   });
 
-  describe('회수 시각 이동 (3.1-7 검증)', () => {
-    it('PE IRR −3%p: t* 4.19 → 4.96, 회수 연도 동일·회수 시각 이동', () => {
-      const shifted = simulate(baseInput({ scenario: { ...uniformScenario(0, 0), irrShift: { PE: -0.03, RE: 0, Infra: 0, PD: 0 } } }));
+  describe('회수 이동 (3.1-7 검증)', () => {
+    const pe = (d: number) => ({ ...uniformScenario(0, 0), irrShift: { PE: d, RE: 0, Infra: 0, PD: 0 } });
+
+    it('PE IRR −3%p: AAA VII 2020 집행분 t* 4.19 → 4.96, 회수 2024 Q1 → 2024 Q4 (같은 해)', () => {
+      const shifted = simulate(baseInput({ scenario: pe(-0.03) }));
       const b = tranchesOf(base, 'AAA_VII')[0];
       const s = tranchesOf(shifted, 'AAA_VII')[0];
       expectDisplay(b?.tStar, 4.19, '기본 t*');
       expectDisplay(s?.tStar, 4.96, '변경 t*');
+      expect(b?.exitQuarter).toBe(Q(2024, 1));
+      expect(s?.exitQuarter).toBe(Q(2024, 4));
       expect(s?.exitYear).toBe(b?.exitYear);
-      expect(s?.exitTime).toBeGreaterThan(b?.exitTime ?? Number.POSITIVE_INFINITY);
     });
 
-    it('XXX IRR +3%p: 3.49 → 3.21, −3%p: 3.49 → 3.83', () => {
-      const up = simulate(baseInput({ scenario: { ...uniformScenario(0, 0), irrShift: { PE: 0.03, RE: 0, Infra: 0, PD: 0 } } }));
-      const down = simulate(baseInput({ scenario: { ...uniformScenario(0, 0), irrShift: { PE: -0.03, RE: 0, Infra: 0, PD: 0 } } }));
-      expectDisplay(tranchesOf(up, 'XXX')[0]?.tStar, 3.21, 'XXX IRR +3%p t*');
-      expectDisplay(tranchesOf(down, 'XXX')[0]?.tStar, 3.83, 'XXX IRR −3%p t*');
+    it('XXX IRR +3%p: t* 3.21, 2027 Q1 / −3%p: t* 3.83, 2027 Q4', () => {
+      const up = tranchesOf(simulate(baseInput({ scenario: pe(0.03) })), 'XXX')[0];
+      const down = tranchesOf(simulate(baseInput({ scenario: pe(-0.03) })), 'XXX')[0];
+      expectDisplay(up?.tStar, 3.21, 'XXX IRR +3%p t*');
+      expectDisplay(down?.tStar, 3.83, 'XXX IRR −3%p t*');
+      expect(up?.exitQuarter).toBe(Q(2027, 1));
+      expect(down?.exitQuarter).toBe(Q(2027, 4));
     });
   });
 });

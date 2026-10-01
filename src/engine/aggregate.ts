@@ -1,8 +1,8 @@
-// 이벤트 생성·집계·구간 판정 (DESIGN.md 7.5~7.6)
+// 이벤트 생성·집계·구간 판정 (DESIGN.md 7.5~7.6, v0.9 분기 기준)
 
 import type { CashEvent, Fees, Fund, KpiPoint, NavBasis, Phase, SeriesPoint, StepPoint, Tranche } from './types';
-import { applyNavBasis, trancheValueAt, trancheYearEndNav } from './tranches';
-import { startOf, yearOf, type Year, type YearTime } from './time';
+import { applyNavBasis, trancheValueAtQuarter, trancheYearEndNav } from './tranches';
+import { qOfYearStart, startOf, type QIndex, type Year, type YearTime } from './time';
 
 /** 펀드 하나의 계산 결과 */
 export interface FundCalc {
@@ -15,6 +15,8 @@ export interface AggregateContext {
   readonly calcStart: Year;
   readonly endYear: Year;
   readonly asOfTime: YearTime;
+  /** 기준 분기 (7.6 v0.9) */
+  readonly asOfQuarter: QIndex;
   readonly asOfYear: Year;
   readonly fees: Fees;
   readonly navBasis: NavBasis;
@@ -22,18 +24,18 @@ export interface AggregateContext {
 
 const EVENT_ORDER: Record<CashEvent['type'], number> = { call: 0, fee: 1, dist: 2 };
 
-/** 시각 → 유형(call, fee, dist) → 펀드 id 순 정렬 */
+/** 시각 → 분기 → 유형(call, fee, dist) → 펀드 id 순 정렬. 같은 시각(Q4 말 = 다음 해 1/1)은 분기 순 */
 export function sortEvents(events: readonly CashEvent[]): CashEvent[] {
   return [...events].sort(
-    (a, b) => a.time - b.time || EVENT_ORDER[a.type] - EVENT_ORDER[b.type] || a.fundId.localeCompare(b.fundId),
+    (a, b) => a.time - b.time || a.quarter - b.quarter || EVENT_ORDER[a.type] - EVENT_ORDER[b.type] || a.fundId.localeCompare(b.fundId),
   );
 }
 
-/** 7.5 집행(call)·회수(dist) 이벤트. call은 Y.0, dist는 회수 시각 T */
+/** 7.5 집행(call)·회수(dist) 이벤트. call은 1월 1일(그해 Q1), dist는 회수 분기말 */
 export function trancheEvents(tranches: readonly Tranche[]): CashEvent[] {
   return tranches.flatMap((t): CashEvent[] => [
-    { time: startOf(t.investYear), type: 'call', fundId: t.fundId, amount: t.amount },
-    { time: t.exitTime, type: 'dist', fundId: t.fundId, amount: t.exitNet },
+    { time: startOf(t.investYear), year: t.investYear, quarter: qOfYearStart(t.investYear), type: 'call', fundId: t.fundId, amount: t.amount },
+    { time: t.exitTime, year: t.exitYear, quarter: t.exitQuarter, type: 'dist', fundId: t.fundId, amount: t.exitNet },
   ]);
 }
 
@@ -73,7 +75,7 @@ export function seriesOf(fcs: readonly FundCalc[], ctx: AggregateContext): Serie
   const raw: MutablePoint[] = years.map(() => ({ callInvest: 0, callFee: 0, dist: 0, nav: 0 }));
   for (const fc of fcs) {
     for (const e of fc.events) {
-      const p = raw[yearOf(e.time) - ctx.calcStart];
+      const p = raw[e.year - ctx.calcStart];
       if (!p) continue;
       if (e.type === 'call') p.callInvest += e.amount;
       else if (e.type === 'fee') p.callFee += e.amount;
@@ -91,35 +93,35 @@ export function seriesOf(fcs: readonly FundCalc[], ctx: AggregateContext): Serie
   return toSeries(ctx, raw);
 }
 
-/** 3.1-7 계단형 누적선: 이벤트 시각마다 그 시각 이벤트까지 반영한 누적값. 첫 점은 calcStart의 0 */
+/** 3.1-7 계단형 누적선: (시각, 분기)마다 그때까지 반영한 누적값. 첫 점은 calcStart의 0 */
 export function stepsOf(fcs: readonly FundCalc[], ctx: AggregateContext): StepPoint[] {
   const events = sortEvents(fcs.flatMap((fc) => fc.events));
-  const points: StepPoint[] = [{ time: startOf(ctx.calcStart), cumCall: 0, cumDist: 0 }];
+  const points: StepPoint[] = [{ time: startOf(ctx.calcStart), quarter: (qOfYearStart(ctx.calcStart) - 1) as QIndex, cumCall: 0, cumDist: 0 }];
   let cumCall = 0;
   let cumDist = 0;
   events.forEach((e, i) => {
     if (e.type === 'dist') cumDist += e.amount;
     else cumCall += e.amount;
     const next = events[i + 1];
-    if (next === undefined || next.time !== e.time) points.push({ time: e.time, cumCall, cumDist });
+    if (next === undefined || next.time !== e.time || next.quarter !== e.quarter) points.push({ time: e.time, quarter: e.quarter, cumCall, cumDist });
   });
   return points;
 }
 
-/** 9장 kpi: 기준일 시각 τ_asOf 기준 누적 이벤트 합(τ ≤ τ_asOf)과 평가가치 */
+/** 9장 kpi (7.6 v0.9): 기준 분기까지의 이벤트 합(분기 ≤ 기준 분기)과 기준 분기말 평가가치 */
 export function kpiOf(fcs: readonly FundCalc[], ctx: AggregateContext): KpiPoint {
   let cumCall = 0;
   let cumDist = 0;
   let nav = 0;
   for (const fc of fcs) {
     for (const e of fc.events) {
-      if (e.time > ctx.asOfTime) continue;
+      if (e.quarter > ctx.asOfQuarter) continue;
       if (e.type === 'dist') cumDist += e.amount;
       else cumCall += e.amount;
     }
     const isDirect = fc.fund.type === 'direct';
     for (const t of fc.tranches) {
-      nav += applyNavBasis(trancheValueAt(t, ctx.asOfTime), t, isDirect, ctx.fees, ctx.navBasis);
+      nav += applyNavBasis(trancheValueAtQuarter(t, ctx.asOfQuarter), t, isDirect, ctx.fees, ctx.navBasis);
     }
   }
   return {

@@ -1,22 +1,27 @@
-// 관리보수 (DESIGN.md 7.4, 3.4). 펀드 단위, 약정액 기준, 1월 1일 발생
+// 관리보수 (DESIGN.md 7.4, 3.4 v0.9). 펀드 단위, 약정액 기준, 1월 1일(Q1) 발생, 약정 안에서 충당
 
-import type { CashEvent, Fees, Fund, Tranche } from './types';
-import { effectivePeriod } from './tranches';
-import { asYear, startOf } from './time';
+import type { CashEvent, Fees, Fund } from './types';
+import { asYear, qOfYearStart, startOf, type Year } from './time';
+
+export interface FeeItem {
+  readonly year: Year;
+  readonly amount: number;
+}
 
 /**
- * 기간: V ≤ y ≤ max(E) (해당 펀드 마지막 집행분 회수 연도)
- * 요율: y < V + n 이면 mgmtInvest, 이후 mgmtPost
- * direct는 관리보수 없음
+ * 보수 일정: V ≤ y ≤ 마지막 회수 연도, 요율은 y < V + n이면 mgmtInvest, 이후 mgmtPost.
+ * 회수 분기는 집행 금액과 무관하므로 금액보다 먼저 계산할 수 있다 (7.4). direct는 없음
  */
-export function feeEvents(fund: Fund, tranches: readonly Tranche[], fees: Fees): CashEvent[] {
-  if (fund.type === 'direct' || tranches.length === 0) return [];
-  const n = effectivePeriod(fund);
-  const lastExitYear = Math.max(...tranches.map((t) => t.exitYear));
-  const events: CashEvent[] = [];
+export function feeSchedule(fund: Fund, investPeriod: number, lastExitYear: number, fees: Fees): FeeItem[] {
+  if (fund.type === 'direct') return [];
+  const items: FeeItem[] = [];
   for (let y: number = fund.vintage; y <= lastExitYear; y++) {
-    const rate = y < fund.vintage + n ? fees.mgmtInvest : fees.mgmtPost;
-    events.push({ time: startOf(asYear(y)), type: 'fee', fundId: fund.id, amount: fund.commitment * rate });
+    const rate = y < fund.vintage + investPeriod ? fees.mgmtInvest : fees.mgmtPost;
+    items.push({ year: asYear(y), amount: fund.commitment * rate });
   }
-  return events;
+  return items;
+}
+
+export function feeEvents(fund: Fund, schedule: readonly FeeItem[]): CashEvent[] {
+  return schedule.map((f) => ({ time: startOf(f.year), year: f.year, quarter: qOfYearStart(f.year), type: 'fee', fundId: fund.id, amount: f.amount }));
 }

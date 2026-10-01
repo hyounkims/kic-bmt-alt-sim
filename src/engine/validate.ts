@@ -10,7 +10,7 @@ import {
   MOCK_FUND_COUNT,
   MOCK_TOTAL_COMMITMENT,
 } from './constants';
-import { adjustAssumptions, type Assumptions } from './tranches';
+import { adjustAssumptions, fundFeeTotal, type Assumptions } from './tranches';
 import { isValidIsoDate, type Year } from './time';
 import { ASSET_CLASSES, type AssetClass, type Fees, type Fund, type FundType, type Portfolio, type SimError, type SimInput } from './types';
 
@@ -154,7 +154,14 @@ export function validateInput(input: SimInput): SimError[] {
     }
 
     // 3.3-C 조정 후 하한
-    errors.push(...checkAdjustedBounds(f, adjustAssumptions(f, scenario, options), p));
+    const a = adjustAssumptions(f, scenario, options);
+    const boundErrors = checkAdjustedBounds(f, a, p);
+    errors.push(...boundErrors);
+    // 6장 v0.9: 총보수 < 약정 (투자금이 0 이하가 되지 않도록)
+    if (boundErrors.length === 0 && f.commitment > 0 && Number.isInteger(f.investPeriod) && f.investPeriod >= 1) {
+      const fee = fundFeeTotal(f, a, portfolio.fees);
+      if (!(fee < f.commitment)) errors.push(err('FEE_EXCEEDS', `${f.name}: 총보수 ${fee.toFixed(1)} ≥ 약정 ${f.commitment}`, `${p}.commitment`));
+    }
   });
 
   return errors;

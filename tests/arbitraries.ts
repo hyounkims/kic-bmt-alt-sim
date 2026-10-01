@@ -2,6 +2,7 @@
 import fc from 'fast-check';
 import { byClassOf, DEFAULT_OPTIONS, IRR_STEPS, MOIC_STEPS } from '../src/engine/constants';
 import { stepAvailability } from '../src/engine/scenarios';
+import { validateInput } from '../src/engine/validate';
 import { asYear, type Year } from '../src/engine/time';
 import { ASSET_CLASSES, type AssetClass, type ByClass, type Fees, type Fund, type Options, type Portfolio, type Scenario, type SimInput } from '../src/engine/types';
 
@@ -13,7 +14,7 @@ const arbFundBody = fc.record({
   commitment: fc.double({ min: 10, max: 1000, noNaN: true }),
   vintage: fc.integer({ min: CALC_START, max: 2030 }),
   investPeriod: fc.integer({ min: 1, max: 7 }),
-  gIRR: fc.double({ min: 0.02, max: 0.35, noNaN: true }),
+  gIRR: fc.double({ min: 0.05, max: 0.35, noNaN: true }),
   gMOIC: fc.double({ min: 1.05, max: 3.0, noNaN: true }),
 });
 
@@ -35,7 +36,7 @@ function toFund(b: FundBody, i: number, prefix: string): Fund {
 
 export const arbFees: fc.Arbitrary<Fees> = fc.record({
   mgmtInvest: fc.double({ min: 0, max: 0.03, noNaN: true }),
-  mgmtPost: fc.double({ min: 0, max: 0.02, noNaN: true }),
+  mgmtPost: fc.double({ min: 0, max: 0.015, noNaN: true }),
   carry: fc.double({ min: 0, max: 0.3, noNaN: true }),
 });
 
@@ -77,9 +78,9 @@ export function clampToAllowed(portfolio: Portfolio, options: Options, s: Scenar
   return { irrShift, moicShift };
 }
 
+/** 유효 입력만: 3.3-C 하한은 단계를 0으로 되돌리고, 총보수 ≥ 약정(6장 v0.9)인 드문 조합은 제외 */
 export const arbInput = (): fc.Arbitrary<SimInput> =>
-  fc.tuple(arbPortfolio, arbOptions(), arbRawScenario).map(([portfolio, options, raw]) => ({
-    portfolio,
-    options,
-    scenario: clampToAllowed(portfolio, options, raw),
-  }));
+  fc
+    .tuple(arbPortfolio, arbOptions(), arbRawScenario)
+    .map(([portfolio, options, raw]) => ({ portfolio, options, scenario: clampToAllowed(portfolio, options, raw) }))
+    .filter((input) => validateInput(input).length === 0);

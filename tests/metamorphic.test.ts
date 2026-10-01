@@ -7,6 +7,7 @@ import { asYear } from '../src/engine/time';
 import { ASSET_CLASSES, type AssetClass, type SeriesPoint, type SimInput, type SimOutput } from '../src/engine/types';
 import { arbFees, arbFunds, arbInput, arbOptions, arbPortfolio, arbRawScenario, clampToAllowed } from './arbitraries';
 import { tolFor } from './invariantChecks';
+import { validateInput } from '../src/engine/validate';
 
 // DESIGN.md 11.3 변환 관계 (fast-check 무작위 입력)
 
@@ -33,7 +34,7 @@ function ok(out: SimOutput): SimOutput {
 }
 
 describe('11.3 변환 관계', () => {
-  it('비례성: 약정 × k → Call·Distribution·NAV·보수 × k, 회수 시각 불변', () => {
+  it('비례성: 약정 × k → Call·Distribution·NAV·보수 × k, 회수 분기 불변', () => {
     fc.assert(
       fc.property(arbInput(), fc.constantFrom(0.5, 2, 3.7), (input, k) => {
         const scaled: SimInput = { ...input, portfolio: { ...input.portfolio, funds: input.portfolio.funds.map((f) => ({ ...f, commitment: f.commitment * k })) } };
@@ -60,6 +61,7 @@ describe('11.3 변환 관계', () => {
       fc.property(arbFunds('A', 8), arbFunds('B', 8), arbFees, arbOptions(), arbRawScenario, (fa, fb, fees, options, raw) => {
         const union = { funds: [...fa, ...fb], fees };
         const scenario = clampToAllowed(union, options, raw);
+        fc.pre(validateInput({ portfolio: union, scenario, options }).length === 0); // 총보수 < 약정 (6장 v0.9)
         const u = ok(simulate({ portfolio: union, scenario, options }));
         const a = ok(simulate({ portfolio: { funds: fa, fees }, scenario, options }));
         const b = ok(simulate({ portfolio: { funds: fb, fees }, scenario, options }));
@@ -78,7 +80,7 @@ describe('11.3 변환 관계', () => {
     );
   }, PROPERTY_TIMEOUT);
 
-  it('시간 이동: Vintage + 1 → 해당 펀드 이벤트 시각·원시 시계열 + 1 (구간 판정 제외, 전 구간 모드)', () => {
+  it('시간 이동: Vintage + 1 → 해당 펀드 이벤트 시각 + 1년(+4분기)·시계열 + 1 (구간 판정 제외)', () => {
     fc.assert(
       fc.property(arbInput(), fc.nat(), (input, pick) => {
         const funds = input.portfolio.funds;
@@ -100,6 +102,7 @@ describe('11.3 변환 관계', () => {
           near(eb[i]?.time, e.time + 1, 1e-9, `${e.type} 시각`);
           near(eb[i]?.amount, e.amount, tol, `${e.type} 금액`);
           expect(eb[i]?.type).toBe(e.type);
+          expect(eb[i]?.quarter).toBe(e.quarter + 4);
         });
         // 해당 펀드 시계열: 연도 y의 값 = 이동 후 y + 1의 값 (phase 제외)
         const sa = a.series.byFund[target.id] ?? [];
@@ -132,7 +135,8 @@ describe('11.3 변환 관계', () => {
 
   const arbDirection = fc.tuple(arbPortfolio, arbOptions(), fc.constantFrom<AssetClass>(...ASSET_CLASSES), fc.nat(), fc.nat());
 
-  it("방향성: r′↑ → 회수 시각 단축", () => {
+  // v0.9 11.3: 도달 시각 T에 엄격 부등호, 회수 분기는 같은 분기 허용
+  it("방향성: r′↑ → 도달 시각 단축, 회수 분기 비증가", () => {
     fc.assert(
       fc.property(arbDirection, ([portfolio, options, cls, i1, i2]) => {
         const allowed = stepAvailability(portfolio, options, cls, 'irr').filter((s) => s.allowed).map((s) => s.shift);
@@ -140,19 +144,24 @@ describe('11.3 변환 관계', () => {
         const hi = allowed[i2 % allowed.length];
         if (lo === undefined || hi === undefined || lo >= hi) return;
         const zero = { irrShift: { PE: 0, RE: 0, Infra: 0, PD: 0 }, moicShift: { PE: 0, RE: 0, Infra: 0, PD: 0 } };
-        const a = ok(simulate({ portfolio, options, scenario: { ...zero, irrShift: { ...zero.irrShift, [cls]: lo } } }));
-        const b = ok(simulate({ portfolio, options, scenario: { ...zero, irrShift: { ...zero.irrShift, [cls]: hi } } }));
+        const sa = { ...zero, irrShift: { ...zero.irrShift, [cls]: lo } };
+        const sb = { ...zero, irrShift: { ...zero.irrShift, [cls]: hi } };
+        fc.pre(validateInput({ portfolio, options, scenario: sa }).length === 0 && validateInput({ portfolio, options, scenario: sb }).length === 0);
+        const a = ok(simulate({ portfolio, options, scenario: sa }));
+        const b = ok(simulate({ portfolio, options, scenario: sb }));
         const ids = affected({ portfolio, options, scenario: zero }, cls);
         a.tranches.forEach((t, i) => {
-          if (ids.has(t.fundId)) expect(b.tranches[i]?.exitTime, `${t.fundId} ${t.investYear}`).toBeLessThan(t.exitTime);
-          else expect(b.tranches[i]?.exitTime).toBe(t.exitTime);
+          if (ids.has(t.fundId)) {
+            expect(b.tranches[i]?.reachTime, `${t.fundId} ${t.investYear}`).toBeLessThan(t.reachTime);
+            expect(b.tranches[i]?.exitQuarter, `${t.fundId} ${t.investYear}`).toBeLessThanOrEqual(t.exitQuarter);
+          } else expect(b.tranches[i]?.reachTime).toBe(t.reachTime);
         });
       }),
       { numRuns: 200 },
     );
   }, PROPERTY_TIMEOUT);
 
-  it('방향성: M′↑ → 회수 시각 연장', () => {
+  it('방향성: M′↑ → 도달 시각 연장, 회수 분기 비감소', () => {
     fc.assert(
       fc.property(arbDirection, ([portfolio, options, cls, i1, i2]) => {
         const allowed = stepAvailability(portfolio, options, cls, 'moic').filter((s) => s.allowed).map((s) => s.shift);
@@ -160,12 +169,17 @@ describe('11.3 변환 관계', () => {
         const hi = allowed[i2 % allowed.length];
         if (lo === undefined || hi === undefined || lo >= hi) return;
         const zero = { irrShift: { PE: 0, RE: 0, Infra: 0, PD: 0 }, moicShift: { PE: 0, RE: 0, Infra: 0, PD: 0 } };
-        const a = ok(simulate({ portfolio, options, scenario: { ...zero, moicShift: { ...zero.moicShift, [cls]: lo } } }));
-        const b = ok(simulate({ portfolio, options, scenario: { ...zero, moicShift: { ...zero.moicShift, [cls]: hi } } }));
+        const sa = { ...zero, moicShift: { ...zero.moicShift, [cls]: lo } };
+        const sb = { ...zero, moicShift: { ...zero.moicShift, [cls]: hi } };
+        fc.pre(validateInput({ portfolio, options, scenario: sa }).length === 0 && validateInput({ portfolio, options, scenario: sb }).length === 0);
+        const a = ok(simulate({ portfolio, options, scenario: sa }));
+        const b = ok(simulate({ portfolio, options, scenario: sb }));
         const ids = affected({ portfolio, options, scenario: zero }, cls);
         a.tranches.forEach((t, i) => {
-          if (ids.has(t.fundId)) expect(b.tranches[i]?.exitTime, `${t.fundId} ${t.investYear}`).toBeGreaterThan(t.exitTime);
-          else expect(b.tranches[i]?.exitTime).toBe(t.exitTime);
+          if (ids.has(t.fundId)) {
+            expect(b.tranches[i]?.reachTime, `${t.fundId} ${t.investYear}`).toBeGreaterThan(t.reachTime);
+            expect(b.tranches[i]?.exitQuarter, `${t.fundId} ${t.investYear}`).toBeGreaterThanOrEqual(t.exitQuarter);
+          } else expect(b.tranches[i]?.reachTime).toBe(t.reachTime);
         });
       }),
       { numRuns: 200 },

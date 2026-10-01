@@ -5,7 +5,7 @@ import { DEFAULT_OPTIONS, PRINT_AS_OF, ZERO_SCENARIO } from '../../engine/consta
 import { runScenarios, summarizeScenarios, type ScenarioKey, type ScenarioSummaryRow } from '../../engine/scenarios';
 import type { Portfolio, SimInput } from '../../engine/types';
 import { chartMaxValue, renderMainChart } from '../charts/mainChart';
-import { escapeHtml, money, yearTime } from '../format';
+import { escapeHtml, money, quarterLabel, signedQuarters } from '../format';
 import { selectScope, type Scope, type ScopedView } from '../scope';
 
 /** 인쇄 전용 입력 (10.2): 기준일 고정, 해석 기본값 */
@@ -48,13 +48,13 @@ function summaryTable(rows: readonly ScenarioSummaryRow[]): string {
   const body = rows
     .map((r) =>
       r.errors.length === 0
-        ? `<tr class="${r.preset.key === 'base' ? 'is-base' : ''}"><td>${escapeHtml(r.preset.label)}</td><td>${r.endYear}</td><td class="last-exit">${yearTime(r.lastExitTime)}</td><td>${money(r.finalCumCall)}</td><td>${money(r.finalCumDist)}</td>
-             <td class="delta">${r.vsBase ? signed(r.vsBase.lastExitTime, 2) : '—'}</td><td class="delta">${r.vsBase ? signed(r.vsBase.finalCumDist, 1) : '—'}</td></tr>`
+        ? `<tr class="${r.preset.key === 'base' ? 'is-base' : ''}"><td>${escapeHtml(r.preset.label)}</td><td>${r.endYear}</td><td class="last-exit">${quarterLabel(r.lastExitQuarter)}</td><td>${money(r.finalCumCall)}</td><td>${money(r.finalCumDist)}</td>
+             <td class="delta">${r.vsBase ? signedQuarters(r.vsBase.lastExitQuarters) : '—'}</td><td class="delta">${r.vsBase ? signed(r.vsBase.finalCumDist, 1) : '—'}</td></tr>`
         : `<tr><td>${escapeHtml(r.preset.label)}</td><td colspan="6">${escapeHtml(r.errors.join(', '))}</td></tr>`,
     )
     .join('');
   return `<table class="data-table print-summary">
-    <thead><tr><th>시나리오</th><th>종료 연도</th><th>마지막 회수 시각</th><th>최종 누적 Call</th><th>최종 누적 Distribution</th><th>Δ 마지막 회수 (년)</th><th>Δ Distribution</th></tr></thead>
+    <thead><tr><th>시나리오</th><th>종료 연도</th><th>마지막 회수 분기</th><th>최종 누적 Call</th><th>최종 누적 Distribution</th><th>Δ 마지막 회수</th><th>Δ Distribution</th></tr></thead>
     <tbody>${body}</tbody>
   </table>`;
 }
@@ -97,9 +97,9 @@ function page(spec: PageSpec, portfolio: Portfolio): string {
             width: 400,
             height: 270,
           });
-          const delta = s.vsBase ? ` <em>(${signed(s.vsBase.lastExitTime, 2)}년)</em>` : '';
+          const delta = s.vsBase ? ` <em>(${signedQuarters(s.vsBase.lastExitQuarters)})</em>` : '';
           return `<figure class="print-cell${key === 'base' ? ' is-base' : ''}" data-scenario="${key}">
-            <figcaption><strong>${escapeHtml(label)}</strong><span>마지막 회수 ${yearTime(v.lastExitTime)}${delta}</span></figcaption>
+            <figcaption><strong>${escapeHtml(label)}</strong><span>마지막 회수 ${quarterLabel(s.lastExitQuarter)}${delta}</span></figcaption>
             ${chart}
           </figure>`;
         })
@@ -112,8 +112,8 @@ function page(spec: PageSpec, portfolio: Portfolio): string {
       <div>
         <div class="print-eyebrow">Sensitivity Test · IRR / MoIC</div>
         <h1>${spec.no}. ${escapeHtml(spec.heading)} <span>${x0}년 ~ ${xEndYear}년</span></h1>
-        <p>기준일 ${PRINT_AS_OF} (2026년 9월까지 실현, 이후 추정) · 민감도는 투자 시점부터 조정 가정으로 재계산 · 전 자산군 동시 적용</p>
-        <p>IRR ±3%p 가감 · MoIC ±20% 상대 변동 · 단위 $mn · 굵은 테두리 = 기본 가정 · 괄호 = 기본 대비 마지막 회수 시각 차이</p>
+        <p>기준일 ${PRINT_AS_OF} (2026 Q3 말까지 실현, 이후 추정 · 분기 보고 기준) · 민감도는 투자 시점부터 조정 가정으로 재계산 · 전 자산군 동시 적용</p>
+        <p>IRR ±3%p 가감 · MoIC ±20% 상대 변동 · 단위 $mn · 굵은 테두리 = 기본 가정 · 괄호 = 기본 대비 마지막 회수 분기 차이</p>
       </div>
       <div class="print-page-no">${spec.no} / ${PAGES.length}</div>
     </header>
@@ -125,8 +125,8 @@ function page(spec: PageSpec, portfolio: Portfolio): string {
       <div class="print-notes">
         <strong>가정 요약</strong>
         <ul>
-          <li>매년 1월 1일 약정·균등 집행, gIRR로 가치 상승, MoIC 달성 시각에 회수 (t* = ln MoIC / ln(1 + IRR))</li>
-          <li>관리보수 약정액 기준 집행기간 2%·이후 1%(별도 Call), 성과보수 (회수액 − 원금) × 20%, XXX 직접투자는 보수 없음</li>
+          <li>매년 1월 1일 균등 투자, gIRR로 가치 상승, MoIC 도달 분기 말에 회수 (t* = ln MoIC / ln(1 + IRR))</li>
+          <li>관리보수(약정액 기준 집행기간 2%·이후 1%)는 약정 안에서 충당: 투자금 = 약정 − 총보수, 누적 Call = 약정. 성과보수 (회수액 − 원금) × 20%, XXX는 보수 없음</li>
           <li>NAV는 연말 Gross 막대, 누적 Call·Distribution은 실제 발생 시각의 계단형 선, 누적은 2015년부터</li>
           <li>민감도는 투자 시점부터 다시 계산한 가상 시나리오, 조정 하한 IRR′ ≥ 1%·MoIC′ &gt; 1.0x</li>
         </ul>

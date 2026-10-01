@@ -49,7 +49,7 @@ describe('기본 대시보드 (전체, 기준일 2026-09-30)', () => {
     expect(root.querySelector('pattern[id="main-hatch-bg"]')).not.toBeNull();
     expect(root.querySelector('pattern[id="main-hatch-nav"]')).not.toBeNull();
     expect(root.querySelector('.future-bg')).not.toBeNull();
-    expect(root.querySelector('.asof-date')?.textContent).toBe('기준일 2026-09-30');
+    expect(root.querySelector('.asof-date')?.textContent).toBe('기준 2026 Q3 말');
     expect(root.querySelectorAll('.line-call.line:not(.line-est)')).toHaveLength(1);
     expect(root.querySelectorAll('.line-call.line-est')).toHaveLength(1);
     expect(root.querySelectorAll('.line-dist.line-est')).toHaveLength(1);
@@ -82,7 +82,8 @@ describe('기본 대시보드 (전체, 기준일 2026-09-30)', () => {
     expect(root.querySelectorAll('.hit')).toHaveLength(8);
     expect(root.querySelectorAll('.tranche-table tbody tr')).toHaveLength(4);
     const callCard = [...root.querySelectorAll('.kpi-card')].find((c) => c.querySelector('.kpi-label')?.textContent === '누적 Capital Call');
-    expect(callCard?.querySelector('.kpi-value')?.textContent).toBe('333.0'); // 투자 300 + 보수 2020~23 연 6(24) + 2024~26 연 3(9)
+    // 2026 Q3까지: 투자 66 × 4 + 보수 2020~23 연 6 + 2024~26 연 3 = 264 + 24 + 9 = 297 (v0.9 약정 내 보수)
+    expect(callCard?.querySelector('.kpi-value')?.textContent).toBe('297.0'); // 투자 300 + 보수 2020~23 연 6(24) + 2024~26 연 3(9)
   });
 
   it('보기 범위 전환: 자산군 PD', () => {
@@ -144,7 +145,7 @@ describe('민감도 조정 (M4)', () => {
   it('11.1 회수 시각 이동: PE IRR −3%p → AAA VII 2020 집행분 t* 4.19 → 4.96, 회수 시각 2024.19 → 2024.96', () => {
     click(root, shiftBtn('PE', 'irr', -0.03));
     expect(cellText(root, 'AAA_VII:2020', 'tstar')).toBe('4.96 (4.19)');
-    expect(cellText(root, 'AAA_VII:2020', 'exit-time')).toBe('2024.96 (2024.19)');
+    expect(cellText(root, 'AAA_VII:2020', 'exit-time')).toBe('2024 Q4 (2024 Q1)');
     expect(cellText(root, 'XXX:2024', 'tstar')).toBe('3.83 (3.49)'); // XXX도 PE 조정 적용 (3.3-4)
     expect(root.querySelectorAll('.line-base')).toHaveLength(2);
     expect(root.querySelectorAll('.kpi-delta').length).toBeGreaterThan(0);
@@ -220,8 +221,9 @@ describe('민감도 조정 (M4)', () => {
     const row = [...root.querySelectorAll('.scenario-table tbody tr')][1];
     const deltas = [...(row?.querySelectorAll('td.delta') ?? [])].map((td) => td.textContent);
     // 값 자체(0.785 ≈ 12장 4.97 − 4.19)는 scenarios.test.ts에서 검증. 여기서는 화면 표시 = 엔진 결과 서식화
-    const engine = summarizeScenarios(runScenarios(baseInput()), { kind: 'total' })[1]?.vsBase?.lastExitTime ?? Number.NaN;
-    expect(deltas[0]).toBe(`+${engine.toFixed(2)}`);
+    const engine = summarizeScenarios(runScenarios(baseInput()), { kind: 'total' })[1]?.vsBase?.lastExitQuarters ?? Number.NaN;
+    expect(engine).toBe(3);
+    expect(deltas[0]).toBe('+3분기');
     expect([...root.querySelectorAll('.scenario-table tbody tr')][0]?.querySelector('td.delta')?.textContent).toBe('—');
   });
 });

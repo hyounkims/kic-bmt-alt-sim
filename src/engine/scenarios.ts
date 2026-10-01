@@ -3,7 +3,7 @@
 import { byClassOf, IRR_STEPS, MOIC_STEPS } from './constants';
 import { simulate } from './simulate';
 import { adjustAssumptions } from './tranches';
-import type { Year, YearTime } from './time';
+import { type QIndex, type Year, type YearTime } from './time';
 import type { AssetClass, Options, Portfolio, Scenario, ScopeRef, SimInput, SimOutput } from './types';
 import { checkAdjustedBounds } from './validate';
 
@@ -56,6 +56,8 @@ export interface ScenarioSummaryRow {
   /** 범위 내 마지막 회수 연도 */
   readonly endYear: Year;
   readonly lastExitTime: YearTime;
+  /** 마지막 회수 분기 (v0.9) */
+  readonly lastExitQuarter: QIndex;
   readonly finalCumCall: number;
   readonly finalCumDist: number;
   /** 기준일 TVPI */
@@ -64,6 +66,8 @@ export interface ScenarioSummaryRow {
   readonly vsBase: {
     readonly endYear: number;
     readonly lastExitTime: number;
+    /** 마지막 회수 분기 차이 (분기 수, v0.9) */
+    readonly lastExitQuarters: number;
     readonly finalCumCall: number;
     readonly finalCumDist: number;
   } | null;
@@ -72,6 +76,7 @@ export interface ScenarioSummaryRow {
 interface ScopeFigures {
   endYear: Year;
   lastExitTime: YearTime;
+  lastExitQuarter: QIndex;
   finalCumCall: number;
   finalCumDist: number;
   tvpi: number;
@@ -91,6 +96,8 @@ function figuresOf(out: SimOutput, scope: ScopeRef): ScopeFigures | null {
   return {
     endYear: (scope.kind === 'total' ? out.meta.endYear : Math.max(...funds.map((f) => f.lastExitYear))) as Year,
     lastExitTime,
+    // 회수 인식 시각은 분기말 (q + 1) / 4
+    lastExitQuarter: (Math.round(lastExitTime * 4) - 1) as QIndex,
     finalCumCall: last?.cumCall ?? 0,
     finalCumDist: last?.cumDist ?? 0,
     tvpi: kpi.tvpi,
@@ -104,7 +111,7 @@ export function summarizeScenarios(runs: ScenarioRuns, scope: ScopeRef): Scenari
   return runs.runs.map(({ preset, output }) => {
     const fig = figuresOf(output, scope);
     const errors = output.errors.length > 0 ? output.errors.map((e) => e.message) : fig ? [] : ['범위 없음'];
-    const f = fig ?? { endYear: 0 as Year, lastExitTime: 0 as YearTime, finalCumCall: 0, finalCumDist: 0, tvpi: 0 };
+    const f = fig ?? { endYear: 0 as Year, lastExitTime: 0 as YearTime, lastExitQuarter: 0 as QIndex, finalCumCall: 0, finalCumDist: 0, tvpi: 0 };
     return {
       preset,
       errors,
@@ -114,6 +121,7 @@ export function summarizeScenarios(runs: ScenarioRuns, scope: ScopeRef): Scenari
           ? {
               endYear: fig.endYear - baseFig.endYear,
               lastExitTime: fig.lastExitTime - baseFig.lastExitTime,
+              lastExitQuarters: fig.lastExitQuarter - baseFig.lastExitQuarter,
               finalCumCall: fig.finalCumCall - baseFig.finalCumCall,
               finalCumDist: fig.finalCumDist - baseFig.finalCumDist,
             }

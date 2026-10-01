@@ -1,7 +1,7 @@
 // 엔진 입출력 스키마 (DESIGN.md 5장 입력, 9장 출력).
 // 단위: 금액 $mn, 비율 소수(18% → 0.18). 연도는 Year, 시각은 YearTime (time.ts).
 
-import type { Year, YearTime } from './time';
+import type { QIndex, Year, YearTime } from './time';
 
 // ─── 공통 ───────────────────────────────────────────────
 
@@ -75,7 +75,10 @@ export interface SimInput {
 
 export interface Meta {
   readonly asOf: string;
+  /** 기준 분기말 시각 (7.6 v0.9) */
   readonly asOfTime: YearTime;
+  /** 기준 분기 (기준일 이전 마지막 분기말, 당일 포함) */
+  readonly asOfQuarter: QIndex;
   readonly asOfYear: Year;
   readonly calcStart: Year;
   readonly displayStart: Year;
@@ -110,7 +113,13 @@ export interface Tranche {
   readonly moic: number;
   /** MoIC 도달 기간(년). 시각이 아니라 기간이므로 number */
   readonly tStar: number;
+  /** MoIC 도달 시각 T = Y + t* (연속값, 7.3 v0.9) */
+  readonly reachTime: YearTime;
+  /** 회수 분기: T가 속한 분기 */
+  readonly exitQuarter: QIndex;
+  /** 회수 인식 시각 = 회수 분기말 */
   readonly exitTime: YearTime;
+  /** 회수 분기의 연도 */
   readonly exitYear: Year;
   readonly exitGross: number;
   readonly carry: number;
@@ -121,6 +130,10 @@ export type CashEventType = 'call' | 'fee' | 'dist';
 
 export interface CashEvent {
   readonly time: YearTime;
+  /** 집계 연도 (7.5 v0.9: 시각의 정수부가 아니라 분기의 연도) */
+  readonly year: Year;
+  /** 분기 (qIndex). call·fee는 그해 Q1, dist는 회수 분기 */
+  readonly quarter: QIndex;
   readonly type: CashEventType;
   readonly fundId: string;
   readonly amount: number;
@@ -143,6 +156,8 @@ export interface SeriesPoint {
 /** 계단형 누적선 점 (9장 v0.3 보강). time 시각의 이벤트까지 반영한 누적값 */
 export interface StepPoint {
   readonly time: YearTime;
+  /** 실현/추정 분할용 분기 (7.6 v0.9) */
+  readonly quarter: QIndex;
   readonly cumCall: number;
   readonly cumDist: number;
 }

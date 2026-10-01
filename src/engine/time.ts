@@ -58,3 +58,51 @@ export function dateToYearTime(iso: string): YearTime {
   const elapsedDays = (Date.parse(`${iso}T00:00:00Z`) - Date.UTC(year, 0, 1)) / MS_PER_DAY;
   return (year + elapsedDays / daysInYear(year)) as YearTime;
 }
+
+// ── 분기 (DESIGN.md 2장·7.3·7.6 v0.9) ─────────────────────────
+// 분기 키 qIndex = 4 × 연도 + (분기 − 1). Q4 말(y + 1.0)과 다음 해 1월 1일은 시각이 같으므로
+// 비교·집계는 시각이 아니라 qIndex로 한다.
+
+export type QIndex = number & { readonly __brand: 'QIndex' };
+
+export function qIndexOf(year: number, quarter: number): QIndex {
+  if (!Number.isInteger(year) || !Number.isInteger(quarter) || quarter < 1 || quarter > 4) throw new RangeError(`분기 오류: ${year} Q${quarter}`);
+  return (4 * year + quarter - 1) as QIndex;
+}
+
+/** 분기의 연도 */
+export function qYear(q: QIndex): Year {
+  return Math.floor(q / 4) as Year;
+}
+
+/** 분기 번호 1~4 */
+export function qNumber(q: QIndex): 1 | 2 | 3 | 4 {
+  return ((((q % 4) + 4) % 4) + 1) as 1 | 2 | 3 | 4;
+}
+
+/** 분기말 시각 (Q1 말 = y.25, Q4 말 = y + 1) */
+export function qEndTime(q: QIndex): YearTime {
+  return ((q + 1) / 4) as YearTime;
+}
+
+/** 연도 y의 1월 1일이 속한 분기 (그해 Q1) */
+export function qOfYearStart(y: Year): QIndex {
+  return (4 * y) as QIndex;
+}
+
+/** 도달 시각 T가 속한 분기: ⌈4T⌉ − 1 (분기 경계에 정확히 닿으면 그 경계로 끝나는 분기). 회수는 이 분기말에 인식 (7.3) */
+export function quarterOfReach(t: YearTime): QIndex {
+  return (Math.ceil(4 * t - 1e-9) - 1) as QIndex;
+}
+
+/** 기준 분기: 날짜 이전 마지막 분기말이 속한 분기 (그 날짜가 분기말이면 그 분기) (7.6) */
+export function asOfQuarterOf(iso: string): QIndex {
+  if (!isValidIsoDate(iso)) throw new RangeError(`유효하지 않은 날짜: ${iso}`);
+  const year = Number(iso.slice(0, 4));
+  const month = Number(iso.slice(5, 7));
+  const day = Number(iso.slice(8, 10));
+  const quarterOfMonth = Math.floor((month - 1) / 3); // 0~3
+  const lastDayOfQuarterMonth = new Date(Date.UTC(year, quarterOfMonth * 3 + 3, 0)).getUTCDate();
+  const isQuarterEnd = month === quarterOfMonth * 3 + 3 && day === lastDayOfQuarterMonth;
+  return (4 * year + quarterOfMonth - (isQuarterEnd ? 0 : 1)) as QIndex;
+}
