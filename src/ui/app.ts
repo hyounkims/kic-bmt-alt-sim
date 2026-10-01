@@ -33,8 +33,8 @@ export interface ViewState {
 }
 
 export function initialState(scope: Scope, asOf: string): ViewState {
-  const { irrShiftMode, moicShiftMode, applyToDirect, navBasis, sensitivityMode } = DEFAULT_OPTIONS;
-  return { scope, asOf, scenario: ZERO_SCENARIO, settings: { irrShiftMode, moicShiftMode, applyToDirect, navBasis, sensitivityMode }, tab: 'scenarios' };
+  const { irrShiftMode, moicShiftMode, applyToDirect, navBasis } = DEFAULT_OPTIONS;
+  return { scope, asOf, scenario: ZERO_SCENARIO, settings: { irrShiftMode, moicShiftMode, applyToDirect, navBasis }, tab: 'scenarios' };
 }
 
 /** 한 번의 렌더링에 필요한 엔진 결과 */
@@ -195,15 +195,13 @@ function renderTrancheTable(view: ScopedView, out: SimOutput, base: SimOutput | 
     .map((t) => {
       const bt: Tranche | undefined = baseOf.get(`${t.fundId}:${t.investYear}`);
       const done = t.exitTime <= out.meta.asOfTime;
-      // 3.3-D: 기준일 직후 회수 (v0.6)
-      const atAsOf = !done && t.exitTime - out.meta.asOfTime < 1e-6;
       return `<tr class="${done ? 'exited' : ''}" data-tranche="${t.fundId}:${t.investYear}">
         <td>${escapeHtml(names.get(t.fundId) ?? t.fundId)}</td><td>${t.investYear}</td><td>${money(t.amount)}</td>
         <td>${withBase(t.irr, bt?.irr, pct)}</td><td>${withBase(t.moic, bt?.moic, multiple)}</td>
         <td class="tstar">${withBase(t.tStar, bt?.tStar, (v) => v.toFixed(2))}</td>
         <td class="exit-time">${withBase(t.exitTime, bt?.exitTime, yearTime)}</td><td>${withBase(t.exitYear, bt?.exitYear, String)}</td>
         <td>${money(t.exitGross)}</td><td>${money(t.carry)}</td><td>${money(t.exitNet)}</td>
-        <td>${done ? '회수 완료' : atAsOf ? '기준일 직후 회수 (추정)' : '보유'}${t.locked ? ' · 고정' : ''}</td>
+        <td>${done ? '회수 완료' : '보유'}</td>
       </tr>`;
     })
     .join('');
@@ -261,7 +259,7 @@ function renderAssumptions(): string {
     ['민감도', 'IRR ±3%p 가감, MoIC ±20% 상대 변동 (설정에서 해석 전환). 3%p·20% 단위 −2~+2단계. IRR·MoIC 동시 조정 가능 (3.3)'],
     ['XXX 연동', 'PE 조정을 XXX(직접투자)에도 같은 폭 적용, 설정에서 분리 가능 (3.3-4)'],
     ['조정 하한', 'IRR′ ≥ 1%, MoIC′ > 1.0x. 위반 단계는 비활성화 — 손실 케이스의 성과보수 규칙이 원문에 없음 (3.3-C)'],
-    ['민감도 해석', '기본(전 구간 재계산)은 모든 집행분을 조정 IRR·MoIC로 투자 시점부터 다시 계산한 가상 시나리오. 실현/추정은 기준일 기준 표시 구분. 실무 모드는 기준일 이전을 기본 가정 결과로 고정하고 이후만 재계산 (3.3-6)'],
+    ['민감도 해석', '모든 집행분을 조정 IRR·MoIC로 투자 시점부터 다시 계산한 가상 시나리오. 실현/추정은 기준일 기준 표시 구분 (3.3-6)'],
     ['시나리오 비교', '인쇄용 5개 시나리오는 전 자산군 동시 적용, 전 구간 재계산 (8장, 3.3-A)'],
   ];
   return `<section class="tab-content assumptions">
@@ -277,7 +275,7 @@ function renderGuide(): string {
     ['기준일', '이전은 실현(채움·실선), 이후는 추정(빗금·점선). 기본값은 오늘'],
     ['민감도 조정', '자산군별 IRR(±3%p 단위)·MoIC(±20% 단위)를 누르면 즉시 반영. 빗금 버튼은 조정 하한(IRR′ ≥ 1%, MoIC′ > 1.0x) 위반으로 선택 불가. "기본 가정으로 초기화"로 되돌림'],
     ['비교', '조정하면 차트에 회색 기본 가정 누적선, KPI에 기본 대비 증감, 집행분 표에 괄호로 기본값 표시'],
-    ['해석 설정', 'IRR %p/상대, MoIC 상대/절대, NAV Gross/Net, 민감도 모드(전 구간/실무), XXX 연동'],
+    ['해석 설정', 'IRR %p/상대, MoIC 상대/절대, NAV Gross/Net, XXX 연동'],
     ['5개 시나리오', '전 자산군 동시 적용 결과 비교. "전 자산군 적용"으로 화면에 반영'],
     ['차트 툴팁', '연도 위에 마우스를 올리면 그해 NAV·누적값·당해 흐름 표시'],
     ['인쇄 / PDF', '오른쪽 위 버튼. 기준일 2026-09-30 고정 2페이지. 프린터·Microsoft Print to PDF는 레이아웃 "가로", 용지 "A4" 선택'],
@@ -408,7 +406,6 @@ export function mountApp(root: HTMLElement, portfolio: Portfolio, initial: ViewS
       if (key === 'irrShiftMode' && (el.value === 'pp' || el.value === 'relative')) s.irrShiftMode = el.value;
       else if (key === 'moicShiftMode' && (el.value === 'relative' || el.value === 'absolute')) s.moicShiftMode = el.value;
       else if (key === 'navBasis' && (el.value === 'gross' || el.value === 'net')) s.navBasis = el.value;
-      else if (key === 'sensitivityMode' && (el.value === 'full' || el.value === 'forward')) s.sensitivityMode = el.value;
       else if (key === 'applyToDirect' && el instanceof HTMLInputElement) s.applyToDirect = el.checked;
       else return;
       const availability = availabilityOf(portfolio, optionsOf({ ...state, settings: s }));

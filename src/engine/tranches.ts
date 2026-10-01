@@ -1,6 +1,5 @@
 // 집행분 생성·가정 조정·집행분 계산 (DESIGN.md 7.1~7.3, 전 구간 모드)
 
-import { AFTER_AS_OF_EPSILON } from './constants';
 import type { Fees, Fund, NavBasis, Options, Scenario, Tranche } from './types';
 import { asYear, asYearTime, startOf, type Year, type YearTime } from './time';
 
@@ -40,7 +39,6 @@ function makeTranche(
   a: Assumptions,
   exitTime: YearTime,
   exitGross: number,
-  path: { preIrr: number; anchorTime: YearTime; anchorValue: number; locked: boolean },
 ): Tranche {
   const carry = fund.type === 'direct' ? 0 : fees.carry * (exitGross - amount);
   return {
@@ -55,7 +53,6 @@ function makeTranche(
     exitGross,
     carry,
     exitNet: exitGross - carry,
-    ...path,
   };
 }
 
@@ -69,44 +66,14 @@ export function buildTranches(fund: Fund, a: Assumptions, fees: Fees): Tranche[]
     const investYear = asYear(fund.vintage + k);
     const start = startOf(investYear);
     const exitTime = asYearTime(start + tStar);
-    tranches.push(makeTranche(fund, fees, investYear, amount, a, exitTime, amount * a.moic, { preIrr: a.irr, anchorTime: start, anchorValue: amount, locked: false }));
+    tranches.push(makeTranche(fund, fees, investYear, amount, a, exitTime, amount * a.moic));
   }
   return tranches;
 }
 
-/**
- * 7.7 실무 모드: 기준일 τ_asOf 이전은 기본 가정(base)으로 고정하고 이후만 조정 가정(adj)으로 재계산.
- *   - 기본 가정 회수 시각 T_base ≤ τ_asOf : 기본 가정 결과로 고정 (locked)
- *   - Y ≤ τ_asOf < T_base : N₀ = A(1 + r)^(τ_asOf − Y), 이후 N₀(1 + r′)^(τ − τ_asOf).
- *       τ_r = ln(A·M′ / N₀) / ln(1 + r′), T = τ_asOf + τ_r. N₀ ≥ A·M′이면 기준일 직후(τ_asOf + ε)에 N₀로 회수 (3.3-D, v0.6)
- *   - Y > τ_asOf : 전 구간 모드와 동일
- */
-export function buildTranchesForward(fund: Fund, base: Assumptions, adj: Assumptions, fees: Fees, asOfTime: YearTime): Tranche[] {
-  const baseTranches = buildTranches(fund, base, fees);
-  const adjTranches = buildTranches(fund, adj, fees);
-  return baseTranches.map((bt, k) => {
-    const start = startOf(bt.investYear);
-    if (bt.exitTime <= asOfTime) return { ...bt, locked: true };
-    const at = adjTranches[k];
-    if (start > asOfTime || !at) return at ?? bt;
-    const a = bt.amount;
-    const n0 = a * Math.pow(1 + base.irr, asOfTime - start);
-    const target = a * adj.moic;
-    const exceeded = n0 >= target;
-    const exitTime = exceeded ? asYearTime(asOfTime + AFTER_AS_OF_EPSILON) : asYearTime(asOfTime + Math.log(target / n0) / Math.log1p(adj.irr));
-    return makeTranche(fund, fees, bt.investYear, a, adj, exitTime, exceeded ? n0 : target, {
-      preIrr: base.irr,
-      anchorTime: asOfTime,
-      anchorValue: n0,
-      locked: false,
-    });
-  });
-}
-
-/** 가치 경로 공식 (회수 여부와 무관) */
+/** 가치 공식 (회수 여부와 무관): A × (1 + r′)^(τ − Y) */
 function pathValue(t: Tranche, time: number): number {
-  if (time <= t.anchorTime) return t.amount * Math.pow(1 + t.preIrr, time - t.investYear);
-  return t.anchorValue * Math.pow(1 + t.irr, time - t.anchorTime);
+  return t.amount * Math.pow(1 + t.irr, time - t.investYear);
 }
 
 /** 7.3 시각 τ의 평가가치: Y ≤ τ < T에서 가치 경로, 그 밖은 0 */

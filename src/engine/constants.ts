@@ -10,9 +10,6 @@ export const ADJUSTED_MOIC_MIN_EXCLUSIVE = 1.0;
 /** 하한 경계 비교용 부동소수 허용 오차 */
 export const BOUND_EPSILON = 1e-9;
 
-/** 7.7 / 3.3-D: 기준일에 이미 목표 MoIC를 넘은 집행분의 회수 시각 = 기준일 직후 (추정 구간, v0.6) */
-export const AFTER_AS_OF_EPSILON = 1e-9;
-
 /** 3.3-7 조정 단위: 원문 "±3%씩", "±20%씩". 해석(pp/relative 등)은 options가 정한다 */
 export const IRR_STEPS: readonly number[] = [-0.06, -0.03, 0, 0.03, 0.06];
 export const MOIC_STEPS: readonly number[] = [-0.4, -0.2, 0, 0.2, 0.4];
@@ -41,7 +38,6 @@ export const DEFAULT_OPTIONS: Options = {
   irrShiftMode: 'pp',
   moicShiftMode: 'relative',
   applyToDirect: true,
-  sensitivityMode: 'full',
   navBasis: 'gross',
   calcStart: asYear(2015),
   displayStart: asYear(2017),

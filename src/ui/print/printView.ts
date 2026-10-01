@@ -3,14 +3,14 @@
 
 import { DEFAULT_OPTIONS, PRINT_AS_OF, ZERO_SCENARIO } from '../../engine/constants';
 import { runScenarios, summarizeScenarios, type ScenarioKey, type ScenarioSummaryRow } from '../../engine/scenarios';
-import type { Portfolio, SensitivityMode, SimInput } from '../../engine/types';
+import type { Portfolio, SimInput } from '../../engine/types';
 import { chartMaxValue, renderMainChart } from '../charts/mainChart';
 import { escapeHtml, money, yearTime } from '../format';
 import { selectScope, type Scope, type ScopedView } from '../scope';
 
 /** 인쇄 전용 입력 (10.2): 기준일 고정, 해석 기본값 */
-export function printInput(portfolio: Portfolio, sensitivityMode: SensitivityMode): SimInput {
-  return { portfolio, scenario: ZERO_SCENARIO, options: { ...DEFAULT_OPTIONS, asOf: PRINT_AS_OF, sensitivityMode } };
+export function printInput(portfolio: Portfolio): SimInput {
+  return { portfolio, scenario: ZERO_SCENARIO, options: { ...DEFAULT_OPTIONS, asOf: PRINT_AS_OF } };
 }
 
 /** 2행 × 3열: 행 IRR / MoIC, 열 하향 / 기본 / 상향 */
@@ -24,13 +24,11 @@ interface PageSpec {
   readonly no: number;
   readonly scope: Scope;
   readonly heading: string;
-  /** 민감도 모드: 두 페이지 모두 전 구간 재계산 (10.2 v0.7) */
-  readonly mode: SensitivityMode;
 }
 
 const PAGES: readonly PageSpec[] = [
-  { no: 1, scope: { kind: 'total' }, heading: '대체 포트폴리오 전체', mode: 'full' },
-  { no: 2, scope: { kind: 'fund', id: 'AAA_VII' }, heading: 'PE 포트폴리오 AAA VII', mode: 'full' },
+  { no: 1, scope: { kind: 'total' }, heading: '대체 포트폴리오 전체' },
+  { no: 2, scope: { kind: 'fund', id: 'AAA_VII' }, heading: 'PE 포트폴리오 AAA VII' },
 ];
 
 const signed = (v: number, digits: number) => `${v >= 0 ? '+' : '−'}${Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits })}`;
@@ -62,7 +60,7 @@ function summaryTable(rows: readonly ScenarioSummaryRow[]): string {
 }
 
 function page(spec: PageSpec, portfolio: Portfolio): string {
-  const runs = runScenarios(printInput(portfolio, spec.mode));
+  const runs = runScenarios(printInput(portfolio));
   const summary = new Map(summarizeScenarios(runs, spec.scope).map((r) => [r.preset.key, r]));
   const byKey = new Map(runs.runs.map((r) => [r.preset.key, r.output]));
   const views = new Map<ScenarioKey, ScopedView>();
@@ -109,7 +107,7 @@ function page(spec: PageSpec, portfolio: Portfolio): string {
     </div>`,
   ).join('');
 
-  return `<section class="print-page" data-page="${spec.no}" data-mode="${spec.mode}">
+  return `<section class="print-page" data-page="${spec.no}">
     <header class="print-head">
       <div>
         <div class="print-eyebrow">Sensitivity Test · IRR / MoIC</div>

@@ -2,7 +2,7 @@
 
 import { kpiOf, seriesOf, sortEvents, stepsOf, trancheEvents, type AggregateContext, type FundCalc } from './aggregate';
 import { feeEvents } from './fees';
-import { adjustAssumptions, buildTranches, buildTranchesForward } from './tranches';
+import { adjustAssumptions, buildTranches } from './tranches';
 import { dateToYearTime, startOf, yearOf, type Year, type YearTime } from './time';
 import {
   ASSET_CLASSES,
@@ -56,15 +56,12 @@ export function simulate(input: SimInput): SimOutput {
 
   const asOfTime = dateToYearTime(options.asOf);
 
-  // 7.1~7.4 펀드별 계산 (가정 조정 → 집행분 → 관리보수). 실무 모드는 7.7
+  // 7.1~7.4 펀드별 계산 (가정 조정 → 집행분 → 관리보수)
   const fundCalcs: FundCalc[] = [];
   const funds: FundInfo[] = [];
   for (const fund of portfolio.funds) {
     const a = adjustAssumptions(fund, scenario, options);
-    const tranches =
-      options.sensitivityMode === 'forward'
-        ? buildTranchesForward(fund, { irr: fund.gIRR, moic: fund.gMOIC }, a, fees, asOfTime)
-        : buildTranches(fund, a, fees);
+    const tranches = buildTranches(fund, a, fees);
     const events = [...trancheEvents(tranches), ...feeEvents(fund, tranches, fees)];
     fundCalcs.push({ fund, tranches, events });
     funds.push({

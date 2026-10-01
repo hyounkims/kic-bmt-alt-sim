@@ -51,7 +51,6 @@ export interface Scenario {
 
 export type IrrShiftMode = 'pp' | 'relative';
 export type MoicShiftMode = 'relative' | 'absolute';
-export type SensitivityMode = 'full' | 'forward';
 export type NavBasis = 'gross' | 'net';
 
 export interface Options {
@@ -61,7 +60,6 @@ export interface Options {
   readonly moicShiftMode: MoicShiftMode;
   /** PE 조정을 직접투자(XXX)에도 적용 (3.3-4) */
   readonly applyToDirect: boolean;
-  readonly sensitivityMode: SensitivityMode;
   readonly navBasis: NavBasis;
   readonly calcStart: Year;
   readonly displayStart: Year;
@@ -117,15 +115,6 @@ export interface Tranche {
   readonly exitGross: number;
   readonly carry: number;
   readonly exitNet: number;
-  /** 실무 모드에서 고정된 집행분 여부 (7.7) */
-  readonly locked: boolean;
-  /**
-   * 가치 경로 (9장 v0.5): τ ≤ anchorTime이면 A × (1 + preIrr)^(τ − Y),
-   * 이후 anchorValue × (1 + irr)^(τ − anchorTime)
-   */
-  readonly preIrr: number;
-  readonly anchorTime: YearTime;
-  readonly anchorValue: number;
 }
 
 export type CashEventType = 'call' | 'fee' | 'dist';

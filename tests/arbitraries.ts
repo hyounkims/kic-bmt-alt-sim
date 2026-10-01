@@ -48,13 +48,12 @@ const arbAsOf = fc
   .date({ min: new Date(Date.UTC(2015, 0, 1)), max: new Date(Date.UTC(2040, 11, 31)), noInvalidDate: true })
   .map((d) => d.toISOString().slice(0, 10));
 
-export const arbOptions = (modes: readonly Options['sensitivityMode'][] = ['full', 'forward']): fc.Arbitrary<Options> =>
+export const arbOptions = (): fc.Arbitrary<Options> =>
   fc.record({
     asOf: arbAsOf,
     irrShiftMode: fc.constantFrom<Options['irrShiftMode']>('pp', 'relative'),
     moicShiftMode: fc.constantFrom<Options['moicShiftMode']>('relative', 'absolute'),
     applyToDirect: fc.boolean(),
-    sensitivityMode: fc.constantFrom(...modes),
     navBasis: fc.constantFrom<Options['navBasis']>('gross', 'net'),
   }).map((o) => ({ ...DEFAULT_OPTIONS, ...o, calcStart: asYear(CALC_START) }));
 
@@ -78,8 +77,8 @@ export function clampToAllowed(portfolio: Portfolio, options: Options, s: Scenar
   return { irrShift, moicShift };
 }
 
-export const arbInput = (modes?: readonly Options['sensitivityMode'][]): fc.Arbitrary<SimInput> =>
-  fc.tuple(arbPortfolio, arbOptions(modes), arbRawScenario).map(([portfolio, options, raw]) => ({
+export const arbInput = (): fc.Arbitrary<SimInput> =>
+  fc.tuple(arbPortfolio, arbOptions(), arbRawScenario).map(([portfolio, options, raw]) => ({
     portfolio,
     options,
     scenario: clampToAllowed(portfolio, options, raw),

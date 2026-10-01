@@ -1,7 +1,5 @@
 // DESIGN.md 11.2 불변 조건 검사 함수. mock 결정론 테스트와 fast-check 무작위 테스트가 공유한다.
 import { expect } from 'vitest';
-import { ZERO_SCENARIO } from '../src/engine/constants';
-import { simulate } from '../src/engine/simulate';
 import { yearOf } from '../src/engine/time';
 import { ASSET_CLASSES, type SimInput, type SimOutput } from '../src/engine/types';
 
@@ -22,16 +20,14 @@ export function checkInvariants(input: SimInput, out: SimOutput): void {
   expect(out.errors).toEqual([]);
   const total = out.series.total;
   const last = total[total.length - 1];
-  const forward = input.options.sensitivityMode === 'forward';
   const funds = new Map(input.portfolio.funds.map((f) => [f.id, f]));
 
   // 누적 투자 Call 총합 = 약정 합계
   near(total.reduce((s, p) => s + p.callInvest, 0), input.portfolio.funds.reduce((s, f) => s + f.commitment, 0), tol, '투자 Call 합');
 
-  // 회수 총액 = A × M′ (실무 모드 초과 케이스는 ≥), 성과보수 = carry × (회수 총액 − A), direct는 0
+  // 회수 총액 = A × M′, 성과보수 = carry × (회수 총액 − A), direct는 0
   for (const t of out.tranches) {
-    if (forward) expect(t.exitGross, `${t.fundId} ${t.investYear} 회수 총액`).toBeGreaterThanOrEqual(t.amount * t.moic - tol);
-    else near(t.exitGross, t.amount * t.moic, tol, `${t.fundId} ${t.investYear} 회수 총액`);
+    near(t.exitGross, t.amount * t.moic, tol, `${t.fundId} ${t.investYear} 회수 총액`);
     const carry = funds.get(t.fundId)?.type === 'direct' ? 0 : input.portfolio.fees.carry * (t.exitGross - t.amount);
     near(t.carry, carry, tol, `${t.fundId} 성과보수`);
     near(t.exitNet, t.exitGross - t.carry, tol, `${t.fundId} 순회수`);
@@ -77,16 +73,3 @@ export function checkInvariants(input: SimInput, out: SimOutput): void {
   near(lastStep?.cumDist, last?.cumDist, tol, '계단 최종 Distribution');
 }
 
-/** 11.2 실무 모드: 기준일 이전 이벤트·연말 NAV·기준일 KPI = 기본 가정 결과 */
-export function checkForwardFixedPast(input: SimInput, out: SimOutput): void {
-  const tol = tolFor(input);
-  const base = simulate({ ...input, scenario: ZERO_SCENARIO, options: { ...input.options, sensitivityMode: 'full' } });
-  const tau = out.meta.asOfTime;
-  const key = (e: SimOutput['events'][number]) => `${e.fundId}|${e.type}|${e.time.toFixed(9)}|${e.amount.toFixed(6)}`;
-  const before = (o: SimOutput) => o.events.filter((e) => e.time < tau).map(key).sort();
-  expect(before(out), '기준일 이전 이벤트').toEqual(before(base));
-  const baseNav = new Map(base.series.total.map((p) => [p.year as number, p.nav]));
-  for (const p of out.series.total) if (p.year + 1 <= tau) near(p.nav, baseNav.get(p.year) ?? 0, tol, `${p.year} 연말 NAV`);
-  for (const k of ['cumCall', 'cumDist', 'nav'] as const) near(out.kpi.total[k], base.kpi.total[k], tol, `기준일 KPI ${k}`);
-  out.tranches.forEach((t, i) => expect(t.locked, `${t.fundId} ${t.investYear} 고정 여부`).toBe((base.tranches[i]?.exitTime ?? Number.NaN) <= tau));
-}

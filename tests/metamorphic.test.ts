@@ -80,7 +80,7 @@ describe('11.3 변환 관계', () => {
 
   it('시간 이동: Vintage + 1 → 해당 펀드 이벤트 시각·원시 시계열 + 1 (구간 판정 제외, 전 구간 모드)', () => {
     fc.assert(
-      fc.property(arbInput(['full']), fc.nat(), (input, pick) => {
+      fc.property(arbInput(), fc.nat(), (input, pick) => {
         const funds = input.portfolio.funds;
         const j = pick % funds.length;
         const target = funds[j];
@@ -130,7 +130,7 @@ describe('11.3 변환 관계', () => {
     return new Set(input.portfolio.funds.filter((f) => f.assetClass === cls && (f.type === 'fund' || input.options.applyToDirect)).map((f) => f.id));
   }
 
-  const arbDirection = fc.tuple(arbPortfolio, arbOptions(['full']), fc.constantFrom<AssetClass>(...ASSET_CLASSES), fc.nat(), fc.nat());
+  const arbDirection = fc.tuple(arbPortfolio, arbOptions(), fc.constantFrom<AssetClass>(...ASSET_CLASSES), fc.nat(), fc.nat());
 
   it("방향성: r′↑ → 회수 시각 단축", () => {
     fc.assert(

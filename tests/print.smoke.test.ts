@@ -71,9 +71,8 @@ describe('인쇄 뷰', () => {
     }
   });
 
-  it('두 페이지 모두 전 구간 재계산, 가정 요약에 민감도 해석 명기 (v0.7)', () => {
+  it('가정 요약에 민감도 해석 명기 (v0.7)', () => {
     for (const p of pages) {
-      expect(p.getAttribute('data-mode')).toBe('full');
       expect(p.querySelector('.print-head p')?.textContent).toContain('민감도는 투자 시점부터 조정 가정으로 재계산');
       expect(p.querySelector('.print-notes')?.textContent).toContain('가상 시나리오');
     }
