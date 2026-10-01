@@ -282,7 +282,7 @@ function renderScenarioTable(c: Computed, state: ViewState): string {
   return `<section class="tab-content">
     <p class="table-note">전 자산군 동시 적용 (8장, 3.3-A) · 해석 설정이 기본이면 인쇄본과 같은 수치 · 최대 종료 연도 ${c.scenarios.maxEndYear} · 단위 $mn</p>
     <div class="table-wrap"><table class="data-table scenario-table">
-      <thead><tr><th>시나리오</th><th>종료 연도</th><th>마지막 회수 (회수일)</th><th>최종 누적 Call</th><th>최종 누적 Distribution</th><th>Δ 마지막 회수</th><th>Δ Distribution</th><th>예상 Net IRR</th><th>예상 Net MoIC</th><th>기준일 TVPI</th><th></th></tr></thead>
+      <thead><tr><th>시나리오</th><th>종료<br>연도</th><th>마지막 회수<br>(회수일)</th><th>최종 누적<br>Call</th><th>최종 누적<br>Distribution</th><th>Δ 마지막<br>회수</th><th>Δ<br>Distribution</th><th>예상<br>Net IRR</th><th>예상<br>Net MoIC</th><th>기준일<br>TVPI</th><th></th></tr></thead>
       <tbody>${rows}</tbody>
     </table></div>
   </section>`;
